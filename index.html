@@ -4,83 +4,599 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>修繕依頼フォーム｜準備中</title>
+<title>修繕依頼フォーム｜淡路社宅</title>
+<!--
+  07 — the resident-facing intake form.
+
+  DEPLOY: this file is the entire contents of pasona-tms-housing/shuzen-irai.
+  index.html and nothing else, ever. Before publishing, replace the three
+  __BPR_*__ placeholders below with the live values. The page refuses to submit
+  while any placeholder remains, so shipping an unconfigured copy is loud
+  rather than silent.
+
+  The four hosting rules are load-bearing, not style:
+    1. No external request of any kind. No CDN, no web font, no analytics, no
+       remote image. The whole infosec position rests on "this page stores and
+       transmits nothing", and one third-party request falsifies it.
+    2. No localStorage, no draft saving, no submitted value echoed into the URL.
+    3. Nothing in the repo but this page.
+    4. The building list endpoint returns names and ids only, enforced in 05.
+
+  Anything added here that fetches, stores, or reports breaks a promise made to
+  residents in writing. Check rule 1 with the browser's Network tab: on load
+  there must be exactly one request, to the building-list endpoint.
+-->
 <style>
-  :root { color-scheme: light dark; }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    padding: 1.5rem 1.25rem 3rem;
-    font-family: system-ui, -apple-system, "Hiragino Kaku Gothic ProN",
-                 "Yu Gothic", "Meiryo", sans-serif;
-    line-height: 1.9;
-    font-size: 16px;
-    background: #fff;
-    color: #1a1a1a;
-  }
-  main { max-width: 34rem; margin: 0 auto; }
-  h1 { font-size: 1.35rem; line-height: 1.6; margin: 0 0 .25rem; }
-  .lead { font-size: 1rem; color: #555; margin: 0 0 2rem; }
-  section { margin: 0 0 1.75rem; }
-  h2 { font-size: 1rem; margin: 0 0 .5rem; }
-  p { margin: 0 0 .75rem; }
-  .box {
-    border: 1px solid #d8d8d8;
-    border-radius: .5rem;
-    padding: 1rem 1.1rem;
-    background: #fafafa;
-  }
-  .date { font-weight: 700; }
-  dl { margin: 0; }
-  dt { font-size: .875rem; color: #555; margin-top: .75rem; }
-  dt:first-child { margin-top: 0; }
-  dd { margin: 0 0 0; font-weight: 600; overflow-wrap: anywhere; }
-  dd a { color: inherit; }
-  footer {
-    margin-top: 2.5rem; padding-top: 1rem;
-    border-top: 1px solid #e5e5e5;
-    font-size: .8125rem; color: #666;
+  :root {
+    --bg: #f7f7f5;
+    --card: #ffffff;
+    --ink: #1a1a1a;
+    --muted: #5a5a55;
+    --line: #d8d8d2;
+    --accent: #1c5d3a;
+    --accent-ink: #ffffff;
+    --error: #a3231d;
+    --error-bg: #fdf2f1;
+    --ok: #1c5d3a;
+    --ok-bg: #eef5f0;
+    --focus: #1c5d3a;
   }
   @media (prefers-color-scheme: dark) {
-    body { background: #141414; color: #ededed; }
-    .lead, dt, footer { color: #a6a6a6; }
-    .box { background: #1d1d1d; border-color: #333; }
-    footer { border-top-color: #2e2e2e; }
+    :root {
+      --bg: #16171a;
+      --card: #1f2126;
+      --ink: #ececea;
+      --muted: #a3a39d;
+      --line: #3a3d44;
+      --accent: #4c9d6f;
+      --accent-ink: #10120f;
+      --error: #f28b85;
+      --error-bg: #2b1d1c;
+      --ok: #7fc79b;
+      --ok-bg: #1a2620;
+      --focus: #7fc79b;
+    }
   }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    padding: 0 1rem 4rem;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN",
+                 "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+    font-size: 16px;      /* never below 16px: iOS zooms the page on focus otherwise */
+    line-height: 1.7;
+  }
+  main { max-width: 34rem; margin: 0 auto; }
+
+  header { padding: 1.75rem 0 1rem; }
+  h1 { font-size: 1.4rem; line-height: 1.4; margin: 0 0 .5rem; }
+  .lede { margin: 0; color: var(--muted); font-size: .95rem; }
+  .privacy {
+    margin: .9rem 0 0; padding: .6rem .8rem;
+    border-left: 3px solid var(--line);
+    color: var(--muted); font-size: .85rem;
+  }
+
+  form { margin: 0; }
+  fieldset {
+    margin: 0 0 1rem; padding: 1rem 1rem .35rem;
+    background: var(--card);
+    border: 1px solid var(--line); border-radius: 10px;
+  }
+  legend { padding: 0 .4rem; font-weight: 600; font-size: .95rem; }
+
+  .field { margin: 0 0 1.1rem; }
+  label.lbl { display: block; font-weight: 600; font-size: .95rem; margin-bottom: .3rem; }
+  .req, .opt {
+    display: inline-block; margin-inline-start: .4rem; padding: .05rem .4rem;
+    border-radius: 999px; font-size: .72rem; font-weight: 700; vertical-align: .1em;
+  }
+  .req { background: var(--accent); color: var(--accent-ink); }
+  .opt { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  .hint { display: block; margin: .15rem 0 .35rem; color: var(--muted); font-size: .82rem; }
+
+  input[type=text], input[type=email], input[type=tel], input[type=date], select, textarea {
+    width: 100%; padding: .7rem .75rem;
+    background: var(--bg); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 8px;
+    font: inherit; font-size: 1rem;
+  }
+  textarea { min-height: 7.5rem; resize: vertical; }
+  select { appearance: none; background-image: none; }
+  input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible {
+    outline: 3px solid var(--focus); outline-offset: 2px;
+  }
+
+  .radios { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .radios label {
+    flex: 1 1 6.5rem; display: flex; align-items: center; justify-content: center;
+    gap: .4rem; min-height: 2.9rem; padding: .4rem .6rem;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+    cursor: pointer;
+  }
+  .radios input { accent-color: var(--accent); width: 1.15rem; height: 1.15rem; }
+  .radios label:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+
+  input[type=file] { width: 100%; font-size: .95rem; }
+  .photo-note { margin: .5rem 0 0; font-size: .85rem; color: var(--muted); }
+  .photo-note.busy { color: var(--ink); }
+
+  .err { display: none; margin: .3rem 0 0; color: var(--error); font-size: .85rem; font-weight: 600; }
+  .field.invalid .err { display: block; }
+  .field.invalid input, .field.invalid select, .field.invalid textarea { border-color: var(--error); }
+
+  /* Honeypot. Off-screen rather than display:none, and never focusable. */
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+  button.submit {
+    width: 100%; min-height: 3.2rem; margin-top: .5rem; padding: .8rem 1rem;
+    background: var(--accent); color: var(--accent-ink);
+    border: 0; border-radius: 10px;
+    font: inherit; font-size: 1.05rem; font-weight: 700; cursor: pointer;
+  }
+  button.submit[disabled] { opacity: .55; cursor: default; }
+
+  .banner { margin: 0 0 1rem; padding: .8rem 1rem; border-radius: 10px; font-size: .92rem; }
+  .banner.error { background: var(--error-bg); color: var(--error); border: 1px solid currentColor; }
+  .banner.warn  { background: var(--card); color: var(--muted); border: 1px solid var(--line); }
+
+  .done { background: var(--ok-bg); border: 1px solid var(--ok); border-radius: 10px; padding: 1.5rem 1.25rem; }
+  .done h2 { margin: 0 0 .6rem; font-size: 1.2rem; color: var(--ok); }
+  .done .id { display: inline-block; margin: .4rem 0 .8rem; padding: .35rem .8rem;
+              background: var(--card); border: 1px solid var(--ok); border-radius: 8px;
+              font-size: 1.35rem; font-weight: 700; letter-spacing: .02em; }
+  .done p { margin: .4rem 0; font-size: .93rem; }
+
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 <main>
 
+<header>
   <h1>修繕依頼フォーム</h1>
-  <p class="lead">ただいま準備中です。</p>
+  <p class="lede">淡路社宅にお住まいの方の、設備の不具合・修繕のご依頼はこちらから。</p>
+  <p class="privacy">このページは入力内容を保存しません。送信ボタンを押したときにのみ、社内の担当システムへ送信されます。</p>
+</header>
 
-  <section class="box">
-    <p><span class="date">2026年9月1日</span>より、このページから
-       社宅・寮の修繕のご依頼を受け付けます。</p>
-    <p>このページのアドレスは変わりません。ブックマークしていただけます。</p>
-  </section>
+<div id="config-error" class="banner error" hidden>
+  このフォームは設定が完了していません。管理担当者にお知らせください。
+</div>
 
-  <section>
-    <h2>それまでの間のご依頼について</h2>
-    <p>8月31日までは、これまでどおりのお申し込み方法をご利用ください。
-       ご不明な点やお急ぎの場合は、下記までご連絡ください。</p>
-  </section>
+<div id="submit-error" class="banner error" hidden role="alert"></div>
 
-  <section class="box">
-    <dl>
-      <dt>お問い合わせ先</dt>
-      <dd>アドミ本部オペレーション室ライフスタイルサポートユニット</dd>
+<form id="form" novalidate>
 
-      <dt>メール</dt>
-      <dd><a href="mailto:awaji_syataku@pasonagroup.co.jp">awaji_syataku@pasonagroup.co.jp</a></dd>
-    </dl>
-  </section>
+  <fieldset>
+    <legend>お住まいについて</legend>
 
-  <footer>
-    パソナ 社宅管理チーム
-  </footer>
+    <div class="field" id="f-property">
+      <label class="lbl" for="propertyName">物件名<span class="req">必須</span></label>
+      <span class="hint" id="property-hint">お住まいの建物をお選びください。</span>
+      <select id="propertyName" name="propertyName" aria-describedby="property-hint">
+        <option value="">読み込み中…</option>
+      </select>
+      <input type="text" id="propertyNameFree" name="propertyNameFree" hidden
+             autocomplete="off" aria-describedby="property-hint">
+      <p class="err" id="e-property">物件名をご入力ください。</p>
+    </div>
+
+    <div class="field" id="f-room">
+      <label class="lbl" for="roomNo">部屋番号<span class="req">必須</span></label>
+      <span class="hint" id="room-hint">戸建てなど部屋番号がない場合は「-」とご入力ください。</span>
+      <input type="text" id="roomNo" name="roomNo" inputmode="text"
+             autocomplete="off" aria-describedby="room-hint">
+      <p class="err" id="e-room">部屋番号をご入力ください。</p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>不具合の内容</legend>
+
+    <div class="field" id="f-content">
+      <label class="lbl" for="content">内容<span class="req">必須</span></label>
+      <span class="hint" id="content-hint">どこで、何が、どのようになっているかをお書きください。</span>
+      <textarea id="content" name="content" aria-describedby="content-hint"></textarea>
+      <p class="err" id="e-content">内容をご入力ください。</p>
+    </div>
+
+    <div class="field" id="f-noticed">
+      <label class="lbl" for="noticedDate">不具合に気付いた日<span class="req">必須</span></label>
+      <input type="date" id="noticedDate" name="noticedDate">
+      <p class="err" id="e-noticed">未来の日付は指定できません。</p>
+    </div>
+
+    <div class="field" id="f-entry">
+      <span class="lbl" id="entry-label">不在時の入室可否<span class="req">必須</span></span>
+      <span class="hint" id="entry-hint">ご不在のあいだに作業者が入室してもよろしいですか。</span>
+      <div class="radios" role="radiogroup" aria-labelledby="entry-label" aria-describedby="entry-hint">
+        <label><input type="radio" name="entryPermission" value="可">可</label>
+        <label><input type="radio" name="entryPermission" value="不可">不可</label>
+        <label><input type="radio" name="entryPermission" value="要相談">要相談</label>
+      </div>
+      <p class="err" id="e-entry">いずれかをお選びください。</p>
+    </div>
+
+    <div class="field">
+      <label class="lbl" for="partNumber">品番・メーカー<span class="opt">任意</span></label>
+      <span class="hint" id="part-hint">エアコンや給湯器などは、品番があると手配が早くなります。</span>
+      <input type="text" id="partNumber" name="partNumber" autocomplete="off" aria-describedby="part-hint">
+    </div>
+
+    <div class="field">
+      <label class="lbl" for="photo">状況写真<span class="opt">任意</span></label>
+      <span class="hint" id="photo-hint">写真があると状況が伝わりやすくなります。送信前に自動で縮小します。</span>
+      <input type="file" id="photo" name="photo" accept="image/*" aria-describedby="photo-hint">
+      <p class="photo-note" id="photo-note"></p>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>ご依頼者について</legend>
+
+    <div class="field" id="f-name">
+      <label class="lbl" for="requesterName">お名前<span class="req">必須</span></label>
+      <input type="text" id="requesterName" name="requesterName" autocomplete="name">
+      <p class="err" id="e-name">お名前をご入力ください。</p>
+    </div>
+
+    <div class="field">
+      <label class="lbl" for="requesterKana">フリガナ<span class="opt">任意</span></label>
+      <input type="text" id="requesterKana" name="requesterKana" autocomplete="off">
+    </div>
+
+    <div class="field" id="f-email">
+      <label class="lbl" for="requesterEmail">メールアドレス<span class="req">必須</span></label>
+      <span class="hint" id="email-hint">受付のお知らせと完了のご連絡をお送りします。</span>
+      <input type="email" id="requesterEmail" name="requesterEmail"
+             autocomplete="email" inputmode="email" aria-describedby="email-hint">
+      <p class="err" id="e-email">メールアドレスをご確認ください。</p>
+    </div>
+
+    <div class="field">
+      <label class="lbl" for="requesterTel">電話番号<span class="opt">任意</span></label>
+      <input type="tel" id="requesterTel" name="requesterTel" autocomplete="tel" inputmode="tel">
+    </div>
+  </fieldset>
+
+  <!-- Honeypot: never shown, never focusable, must stay empty. -->
+  <div class="hp" aria-hidden="true">
+    <label for="hp">この欄は入力しないでください</label>
+    <input type="text" id="hp" name="hp" tabindex="-1" autocomplete="off">
+  </div>
+
+  <button type="submit" class="submit" id="submit">送信する</button>
+</form>
+
+<section class="done" id="done" hidden role="status">
+  <h2>送信しました</h2>
+  <p>受付番号</p>
+  <span class="id" id="done-id">—</span>
+  <p>担当者が内容を確認し、折り返しご連絡いたします。</p>
+  <p>受付のお知らせを <strong id="done-email"></strong> 宛にお送りします。届かない場合は迷惑メールフォルダもご確認ください。</p>
+</section>
 
 </main>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------------------------------------------------------------------
+  // Configuration. Replaced at deploy time; see the comment at the top.
+  // ---------------------------------------------------------------------
+  var LOOKUP_URL = "https://default86515fe88a2949fabfc9af6dae8a96.23.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/12/workflows/42f8cd56731649108a8b612f5ed1e474/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=5-1yvFLqd_ydyGvz1lc_InFrhvlcj4LBUGN6FGQx68U";
+  var INTAKE_URL = "https://default86515fe88a2949fabfc9af6dae8a96.23.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/13/workflows/84032bd837a94af18c845291fb9a0dee/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=5CuEsxT-M1XrGs2aQYxNhiINdQossN1rwxLAkJ3WF1g";
+  var INTAKE_TOKEN = "7VzlOTvJ9iLRxDF8345UkH1MjXZmScBG0PnuhApE";
+
+  var MAX_EDGE = 1600;         // long edge after downscaling
+  var JPEG_STEPS = [0.82, 0.7, 0.58, 0.45];
+  var MAX_PAYLOAD = 5 * 1024 * 1024;  // stay clear of the endpoint's 6 MB cap
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var form = $("form");
+  var submitBtn = $("submit");
+  var errBanner = $("submit-error");
+  var photoNote = $("photo-note");
+  var propSelect = $("propertyName");
+  var propFree = $("propertyNameFree");
+  var propHint = $("property-hint");
+
+  var propertyIds = {};   // building name -> 物件ID, for the 備考 audit trail
+  var freeTextMode = false;
+  var photoBase64 = "";
+  var photoName = "";
+  var sending = false;
+
+  // Ship-safety: refuse to run unconfigured rather than POST to a placeholder.
+  var unconfigured = /^__BPR_/.test(LOOKUP_URL) || /^__BPR_/.test(INTAKE_URL) || /^__BPR_/.test(INTAKE_TOKEN);
+  if (unconfigured) {
+    $("config-error").hidden = false;
+    submitBtn.disabled = true;
+  }
+
+  // 不備に気付いた日 cannot be in the future. Set in the browser's local date,
+  // which for a resident in Japan is JST; the endpoint stores the date as typed.
+  (function () {
+    var d = new Date();
+    var iso = d.getFullYear() + "-" +
+              String(d.getMonth() + 1).padStart(2, "0") + "-" +
+              String(d.getDate()).padStart(2, "0");
+    $("noticedDate").max = iso;
+  })();
+
+  // ---------------------------------------------------------------------
+  // Building list. A failure here must never stop a resident reporting a
+  // fault, so every failure path falls back to a free-text field and the
+  // request lands with 要確認 set by the endpoint.
+  // ---------------------------------------------------------------------
+  function useFreeText(reason) {
+    freeTextMode = true;
+    propSelect.hidden = true;
+    propSelect.disabled = true;
+    propFree.hidden = false;
+    propFree.id = "propertyName";       // keep the label's `for` pointing at the live control
+    propSelect.id = "propertyNameSelect";
+    propHint.textContent = reason;
+  }
+
+  function loadProperties() {
+    if (unconfigured) { useFreeText("お住まいの建物名をご入力ください。"); return; }
+
+    var done = false;
+    var timer = setTimeout(function () {
+      if (!done) { done = true; useFreeText("一覧を取得できませんでした。建物名を直接ご入力ください。"); }
+    }, 8000);
+
+    fetch(LOOKUP_URL, { method: "GET" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (list) {
+        if (done) return;
+        done = true; clearTimeout(timer);
+
+        if (!Array.isArray(list) || list.length === 0) {
+          // Legitimately empty until the first property import runs. An empty
+          // dropdown would be a dead end, so this is a fallback, not an error.
+          useFreeText("建物名を直接ご入力ください。");
+          return;
+        }
+
+        propSelect.innerHTML = "";
+        var ph = document.createElement("option");
+        ph.value = ""; ph.textContent = "選択してください";
+        propSelect.appendChild(ph);
+
+        list.forEach(function (item) {
+          if (!item || !item.name) return;
+          var o = document.createElement("option");
+          o.value = item.name;
+          o.textContent = item.name;
+          propSelect.appendChild(o);
+          propertyIds[item.name] = item.id || "";
+        });
+      })
+      .catch(function () {
+        if (done) return;
+        done = true; clearTimeout(timer);
+        useFreeText("一覧を取得できませんでした。建物名を直接ご入力ください。");
+      });
+  }
+  loadProperties();
+
+  // ---------------------------------------------------------------------
+  // Photo: downscale on the device before encoding. A raw 5 MB phone photo
+  // becomes ~7 MB of base64, which fails the size cap and costs the resident
+  // mobile data either way.
+  // ---------------------------------------------------------------------
+  function readAsDataURL(blob) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(String(fr.result)); };
+      fr.onerror = function () { reject(new Error("read failed")); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  function loadImage(file) {
+    if (typeof createImageBitmap === "function") {
+      // imageOrientation honours the EXIF rotation phones write, so a portrait
+      // photo does not arrive on its side.
+      return createImageBitmap(file, { imageOrientation: "from-image" })
+        .catch(function () { return loadViaElement(file); });
+    }
+    return loadViaElement(file);
+  }
+
+  function loadViaElement(file) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error("decode failed")); };
+      img.src = url;
+    });
+  }
+
+  function toBlob(canvas, quality) {
+    return new Promise(function (resolve) {
+      if (canvas.toBlob) canvas.toBlob(function (b) { resolve(b); }, "image/jpeg", quality);
+      else resolve(null);
+    });
+  }
+
+  function human(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(0) + " KB";
+    return (n / 1024 / 1024).toFixed(1) + " MB";
+  }
+
+  $("photo").addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    photoBase64 = ""; photoName = "";
+    if (!file) { photoNote.textContent = ""; return; }
+
+    photoNote.className = "photo-note busy";
+    photoNote.textContent = "写真を準備しています…";
+    submitBtn.disabled = true;
+
+    loadImage(file).then(function (img) {
+      var w = img.width, h = img.height;
+      var scale = Math.min(1, MAX_EDGE / Math.max(w, h));
+      var cw = Math.max(1, Math.round(w * scale));
+      var ch = Math.max(1, Math.round(h * scale));
+      var canvas = document.createElement("canvas");
+      canvas.width = cw; canvas.height = ch;
+      canvas.getContext("2d").drawImage(img, 0, 0, cw, ch);
+      if (img.close) img.close();
+
+      // Step the quality down until the encoded payload is safely under the cap.
+      var i = 0;
+      function attempt() {
+        return toBlob(canvas, JPEG_STEPS[i]).then(function (blob) {
+          if (!blob) throw new Error("encode failed");
+          if (blob.size * 1.37 > MAX_PAYLOAD && i < JPEG_STEPS.length - 1) { i++; return attempt(); }
+          return blob;
+        });
+      }
+      return attempt().then(function (blob) {
+        return readAsDataURL(blob).then(function (dataUrl) {
+          var comma = dataUrl.indexOf(",");
+          photoBase64 = comma === -1 ? "" : dataUrl.slice(comma + 1);
+          photoName = file.name || "photo.jpg";
+          photoNote.className = "photo-note";
+          photoNote.textContent = "元 " + human(file.size) + " → 送信 " + human(blob.size) +
+                                  "（" + cw + "×" + ch + "）";
+          submitBtn.disabled = unconfigured;
+        });
+      });
+    }).catch(function () {
+      photoBase64 = ""; photoName = "";
+      photoNote.className = "photo-note";
+      photoNote.textContent = "この写真は読み込めませんでした。写真なしで送信できます。";
+      submitBtn.disabled = unconfigured;
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Validation
+  // ---------------------------------------------------------------------
+  function val(id) {
+    var el = document.getElementById(id);
+    return el ? String(el.value || "").trim() : "";
+  }
+  function mark(fieldId, bad) {
+    var f = document.getElementById(fieldId);
+    if (f) f.classList.toggle("invalid", !!bad);
+    return !bad;
+  }
+  function propertyValue() {
+    return freeTextMode ? String(propFree.value || "").trim()
+                        : String(propSelect.value || "").trim();
+  }
+  function entryValue() {
+    var r = form.querySelector('input[name="entryPermission"]:checked');
+    return r ? r.value : "";
+  }
+
+  function validate() {
+    var ok = true;
+    var noticed = val("noticedDate");
+    var email = val("requesterEmail");
+    var today = $("noticedDate").max;
+
+    ok = mark("f-property", propertyValue() === "") && ok;
+    ok = mark("f-room", val("roomNo") === "") && ok;
+    ok = mark("f-content", val("content") === "") && ok;
+    ok = mark("f-noticed", noticed === "" || (today && noticed > today)) && ok;
+    ok = mark("f-entry", entryValue() === "") && ok;
+    ok = mark("f-name", val("requesterName") === "") && ok;
+    ok = mark("f-email", !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) && ok;
+    return ok;
+  }
+
+  // ---------------------------------------------------------------------
+  // Submit
+  // ---------------------------------------------------------------------
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    if (sending || unconfigured) return;
+
+    errBanner.hidden = true;
+
+    if (!validate()) {
+      var first = form.querySelector(".field.invalid");
+      if (first) {
+        first.scrollIntoView({ behavior: "smooth", block: "center" });
+        var focusable = first.querySelector("input, select, textarea");
+        if (focusable) focusable.focus({ preventScroll: true });
+      }
+      return;
+    }
+
+    var name = propertyValue();
+    var body = {
+      propertyName: name,
+      propertyId: propertyIds[name] || "",
+      roomNo: val("roomNo"),
+      content: val("content"),
+      noticedDate: val("noticedDate"),
+      entryPermission: entryValue(),
+      partNumber: val("partNumber"),
+      requesterName: val("requesterName"),
+      requesterKana: val("requesterKana"),
+      requesterEmail: val("requesterEmail"),
+      requesterTel: val("requesterTel"),
+      hp: String($("hp").value || "")
+    };
+    if (photoBase64) { body.photoBase64 = photoBase64; body.photoName = photoName; }
+
+    sending = true;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "送信中…";
+
+    fetch(INTAKE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8", "X-BPR-Token": INTAKE_TOKEN },
+      body: JSON.stringify(body)
+    })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var parsed = null;
+          try { parsed = JSON.parse(t); } catch (ignore) { /* keep parsed null */ }
+          return { ok: r.ok, status: r.status, data: parsed };
+        });
+      })
+      .then(function (res) {
+        if (!res.ok || !res.data || res.data.ok !== true) {
+          throw new Error(res.status === 400 ? "入力内容をご確認のうえ、もう一度お試しください。"
+                                             : "送信できませんでした。時間をおいてもう一度お試しください。");
+        }
+        // Success. The form is replaced rather than cleared, so a stray second
+        // tap has nothing left to submit.
+        $("done-id").textContent = res.data.id != null ? String(res.data.id) : "—";
+        $("done-email").textContent = body.requesterEmail;
+        form.hidden = true;
+        $("done").hidden = false;
+        $("done").scrollIntoView({ behavior: "smooth", block: "start" });
+      })
+      .catch(function (err) {
+        // The form is deliberately left untouched: retyping a long description
+        // on a phone is how a resident gives up instead of reporting.
+        sending = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = "送信する";
+        errBanner.textContent = (err && err.message) ? err.message
+                              : "送信できませんでした。時間をおいてもう一度お試しください。";
+        errBanner.hidden = false;
+        errBanner.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+  });
+})();
+</script>
 </body>
 </html>
