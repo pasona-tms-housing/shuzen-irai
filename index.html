@@ -22,6 +22,11 @@
     3. Nothing in the repo but this page.
     4. The building list endpoint returns names and ids only, enforced in 05.
 
+  Photos are sent as `photos: [{name, base64}]`, up to four, sharing one 5 MB
+  budget. This replaced the single `photoBase64`/`photoName` pair on 2026-08-20;
+  the endpoint reads only the array now, so the two shapes are not
+  interchangeable. Encoding is sequential on purpose — see the comment there.
+
   Anything added here that fetches, stores, or reports breaks a promise made to
   residents in writing. Check rule 1 with the browser's Network tab: on load
   there must be exactly one request, to the building-list endpoint.
@@ -124,6 +129,7 @@
   input[type=file] { width: 100%; font-size: .95rem; }
   .photo-note { margin: .5rem 0 0; font-size: .85rem; color: var(--muted); }
   .photo-note.busy { color: var(--ink); }
+  .photo-note div { margin: .2rem 0; overflow-wrap: anywhere; }
 
   .err { display: none; margin: .3rem 0 0; color: var(--error); font-size: .85rem; font-weight: 600; }
   .field.invalid .err { display: block; }
@@ -234,9 +240,9 @@
 
     <div class="field">
       <label class="lbl" for="photo">状況写真<span class="opt">任意</span></label>
-      <span class="hint" id="photo-hint">写真があると状況が伝わりやすくなります。送信前に自動で縮小します。</span>
-      <input type="file" id="photo" name="photo" accept="image/*" aria-describedby="photo-hint">
-      <p class="photo-note" id="photo-note"></p>
+      <span class="hint" id="photo-hint">写真があると状況が伝わりやすくなります。<strong>4枚まで</strong>お選びいただけます。全体が写ったものと、近くで写したものがあると助かります。送信前に自動で縮小します。</span>
+      <input type="file" id="photo" name="photo" accept="image/*" multiple aria-describedby="photo-hint">
+      <div class="photo-note" id="photo-note"></div>
     </div>
   </fieldset>
 
@@ -312,6 +318,8 @@
   var MAX_EDGE = 1600;         // long edge after downscaling
   var JPEG_STEPS = [0.82, 0.7, 0.58, 0.45];
   var MAX_PAYLOAD = 5 * 1024 * 1024;  // stay clear of the endpoint's 6 MB cap
+  var MAX_PHOTOS = 4;          // the cap is the payload, not this number; see the budget below
+  var B64_INFLATE = 1.37;      // base64 costs about a third on top of the raw bytes
 
   var $ = function (id) { return document.getElementById(id); };
 
@@ -325,8 +333,7 @@
 
   var propertyIds = {};   // building name -> 物件ID, for the 備考 audit trail
   var freeTextMode = false;
-  var photoBase64 = "";
-  var photoName = "";
+  var photos = [];        // [{ name, base64 }] — at most MAX_PHOTOS, within MAX_PAYLOAD together
   var sending = false;
 
   // Ship-safety: refuse to run unconfigured rather than POST to a placeholder.
@@ -451,49 +458,105 @@
     return (n / 1024 / 1024).toFixed(1) + " MB";
   }
 
-  $("photo").addEventListener("change", function (e) {
-    var file = e.target.files && e.target.files[0];
-    photoBase64 = ""; photoName = "";
-    if (!file) { photoNote.textContent = ""; return; }
+  // A long filename from a phone would push the size figures off a narrow screen.
+  function shortName(name) {
+    name = name || "写真";
+    return name.length > 22 ? name.slice(0, 20) + "…" : name;
+  }
 
-    photoNote.className = "photo-note busy";
-    photoNote.textContent = "写真を準備しています…";
+  // Built as text nodes, never innerHTML — filenames come from the device and
+  // are not ours to trust with markup.
+  function setNote(lines, busy) {
+    photoNote.className = "photo-note" + (busy ? " busy" : "");
+    while (photoNote.firstChild) photoNote.removeChild(photoNote.firstChild);
+    lines.forEach(function (text) {
+      var row = document.createElement("div");
+      row.textContent = text;
+      photoNote.appendChild(row);
+    });
+  }
+
+  $("photo").addEventListener("change", function (e) {
+    var files = Array.prototype.slice.call(e.target.files || []);
+    photos = [];
+    if (!files.length) { setNote([], false); return; }
+
+    var notices = [];
+    if (files.length > MAX_PHOTOS) {
+      notices.push("写真は" + MAX_PHOTOS + "枚までです。最初の" + MAX_PHOTOS + "枚を送信します。");
+      files = files.slice(0, MAX_PHOTOS);
+    }
+
+    setNote(notices.concat(["写真を準備しています…（0/" + files.length + "）"]), true);
     submitBtn.disabled = true;
 
-    loadImage(file).then(function (img) {
-      var w = img.width, h = img.height;
-      var scale = Math.min(1, MAX_EDGE / Math.max(w, h));
-      var cw = Math.max(1, Math.round(w * scale));
-      var ch = Math.max(1, Math.round(h * scale));
-      var canvas = document.createElement("canvas");
-      canvas.width = cw; canvas.height = ch;
-      canvas.getContext("2d").drawImage(img, 0, 0, cw, ch);
-      if (img.close) img.close();
+    var lines = [];
+    var usedBytes = 0;
 
-      // Step the quality down until the encoded payload is safely under the cap.
-      var i = 0;
-      function attempt() {
-        return toBlob(canvas, JPEG_STEPS[i]).then(function (blob) {
-          if (!blob) throw new Error("encode failed");
-          if (blob.size * 1.37 > MAX_PAYLOAD && i < JPEG_STEPS.length - 1) { i++; return attempt(); }
-          return blob;
+    // Share what is left evenly across the photos still to come. Without this a
+    // first photo encoded against the whole 5 MB would starve the last one.
+    function budgetFor(index) {
+      return Math.max(0, (MAX_PAYLOAD - usedBytes) / (files.length - index));
+    }
+
+    function encodeOne(file, index) {
+      var canvas = null;
+      return loadImage(file).then(function (img) {
+        var w = img.width, h = img.height;
+        var scale = Math.min(1, MAX_EDGE / Math.max(w, h));
+        var cw = Math.max(1, Math.round(w * scale));
+        var ch = Math.max(1, Math.round(h * scale));
+        canvas = document.createElement("canvas");
+        canvas.width = cw; canvas.height = ch;
+        canvas.getContext("2d").drawImage(img, 0, 0, cw, ch);
+        if (img.close) img.close();
+
+        var budget = budgetFor(index);
+        var i = 0;
+        function attempt() {
+          return toBlob(canvas, JPEG_STEPS[i]).then(function (blob) {
+            if (!blob) throw new Error("encode failed");
+            if (blob.size * B64_INFLATE > budget && i < JPEG_STEPS.length - 1) { i++; return attempt(); }
+            return blob;
+          });
+        }
+
+        return attempt().then(function (blob) {
+          // Even the lowest quality step can miss the budget. Drop this one photo
+          // rather than the whole submission.
+          if (blob.size * B64_INFLATE > budget) {
+            lines.push(shortName(file.name) + "：サイズが大きく、送信できません");
+            return;
+          }
+          return readAsDataURL(blob).then(function (dataUrl) {
+            var comma = dataUrl.indexOf(",");
+            if (comma === -1) throw new Error("read failed");
+            photos.push({ name: file.name || "photo.jpg", base64: dataUrl.slice(comma + 1) });
+            usedBytes += blob.size * B64_INFLATE;
+            lines.push(shortName(file.name) + "：元 " + human(file.size) + " → 送信 " +
+                       human(blob.size) + "（" + cw + "×" + ch + "）");
+          });
         });
-      }
-      return attempt().then(function (blob) {
-        return readAsDataURL(blob).then(function (dataUrl) {
-          var comma = dataUrl.indexOf(",");
-          photoBase64 = comma === -1 ? "" : dataUrl.slice(comma + 1);
-          photoName = file.name || "photo.jpg";
-          photoNote.className = "photo-note";
-          photoNote.textContent = "元 " + human(file.size) + " → 送信 " + human(blob.size) +
-                                  "（" + cw + "×" + ch + "）";
-          submitBtn.disabled = unconfigured;
-        });
+      }).catch(function () {
+        lines.push(shortName(file.name) + "：読み込めませんでした");
+      }).then(function () {
+        // Release the backing store now rather than at GC's convenience; four
+        // full-size canvases held at once is what kills the tab on an older phone.
+        if (canvas) { canvas.width = 0; canvas.height = 0; canvas = null; }
+        setNote(notices.concat(lines,
+          index + 1 < files.length
+            ? ["写真を準備しています…（" + (index + 1) + "/" + files.length + "）"]
+            : []), index + 1 < files.length);
       });
-    }).catch(function () {
-      photoBase64 = ""; photoName = "";
-      photoNote.className = "photo-note";
-      photoNote.textContent = "この写真は読み込めませんでした。写真なしで送信できます。";
+    }
+
+    // Strictly sequential — NOT Promise.all. Decoding several 12 MP images at
+    // once is how iOS runs out of memory and reloads the page mid-form.
+    files.reduce(function (chain, file, index) {
+      return chain.then(function () { return encodeOne(file, index); });
+    }, Promise.resolve()).then(function () {
+      if (!photos.length) notices.push("写真なしで送信できます。");
+      setNote(notices.concat(lines), false);
       submitBtn.disabled = unconfigured;
     });
   });
@@ -569,7 +632,9 @@
       requesterTel: val("requesterTel"),
       hp: String($("hp").value || "")
     };
-    if (photoBase64) { body.photoBase64 = photoBase64; body.photoName = photoName; }
+    // Omitted entirely when there are no photos, so the endpoint's photo branch
+    // is skipped rather than handed an empty array.
+    if (photos.length) { body.photos = photos; }
 
     sending = true;
     submitBtn.disabled = true;
