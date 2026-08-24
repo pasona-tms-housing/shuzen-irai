@@ -187,11 +187,8 @@
 
     <div class="field" id="f-property">
       <label class="lbl" for="propertyName">物件名<span class="req">必須</span></label>
-      <span class="hint" id="property-hint">お住まいの建物をお選びください。</span>
-      <select id="propertyName" name="propertyName" aria-describedby="property-hint">
-        <option value="">読み込み中…</option>
-      </select>
-      <input type="text" id="propertyNameFree" name="propertyNameFree" hidden
+      <span class="hint" id="property-hint">お住まいの建物名をご入力ください。棟名がある場合は棟名までご記入ください。</span>
+      <input type="text" id="propertyName" name="propertyName"
              autocomplete="off" aria-describedby="property-hint">
       <p class="err" id="e-property">物件名をご入力ください。</p>
     </div>
@@ -311,7 +308,6 @@
   // ---------------------------------------------------------------------
   // Configuration. Replaced at deploy time; see the comment at the top.
   // ---------------------------------------------------------------------
-  var LOOKUP_URL = "https://default86515fe88a2949fabfc9af6dae8a96.23.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/12/workflows/42f8cd56731649108a8b612f5ed1e474/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=5-1yvFLqd_ydyGvz1lc_InFrhvlcj4LBUGN6FGQx68U";
   var INTAKE_URL = "https://default86515fe88a2949fabfc9af6dae8a96.23.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/13/workflows/84032bd837a94af18c845291fb9a0dee/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=5CuEsxT-M1XrGs2aQYxNhiINdQossN1rwxLAkJ3WF1g";
   var INTAKE_TOKEN = "7VzlOTvJ9iLRxDF8345UkH1MjXZmScBG0PnuhApE";
 
@@ -327,17 +323,13 @@
   var submitBtn = $("submit");
   var errBanner = $("submit-error");
   var photoNote = $("photo-note");
-  var propSelect = $("propertyName");
-  var propFree = $("propertyNameFree");
-  var propHint = $("property-hint");
+  var propInput = $("propertyName");
 
-  var propertyIds = {};   // building name -> 物件ID, for the 備考 audit trail
-  var freeTextMode = false;
   var photos = [];        // [{ name, base64 }] — at most MAX_PHOTOS, within MAX_PAYLOAD together
   var sending = false;
 
   // Ship-safety: refuse to run unconfigured rather than POST to a placeholder.
-  var unconfigured = /^__BPR_/.test(LOOKUP_URL) || /^__BPR_/.test(INTAKE_URL) || /^__BPR_/.test(INTAKE_TOKEN);
+  var unconfigured = /^__BPR_/.test(INTAKE_URL) || /^__BPR_/.test(INTAKE_TOKEN);
   if (unconfigured) {
     $("config-error").hidden = false;
     submitBtn.disabled = true;
@@ -354,62 +346,14 @@
   })();
 
   // ---------------------------------------------------------------------
-  // Building list. A failure here must never stop a resident reporting a
-  // fault, so every failure path falls back to a free-text field and the
-  // request lands with 要確認 set by the endpoint.
+  // Building name is typed, not chosen. The form deliberately makes NO request
+  // to the property lookup: that endpoint is public and unauthenticated, and
+  // fetching the list here published all 150 building names to anyone who
+  // opened the page. Ticket 16.
+  //
+  // Unmatched names are not an error. 06 creates the request anyway, sets
+  // 要確認, and preserves the text as typed in 備考 for a human to resolve.
   // ---------------------------------------------------------------------
-  function useFreeText(reason) {
-    freeTextMode = true;
-    propSelect.hidden = true;
-    propSelect.disabled = true;
-    propFree.hidden = false;
-    propFree.id = "propertyName";       // keep the label's `for` pointing at the live control
-    propSelect.id = "propertyNameSelect";
-    propHint.textContent = reason;
-  }
-
-  function loadProperties() {
-    if (unconfigured) { useFreeText("お住まいの建物名をご入力ください。"); return; }
-
-    var done = false;
-    var timer = setTimeout(function () {
-      if (!done) { done = true; useFreeText("一覧を取得できませんでした。建物名を直接ご入力ください。"); }
-    }, 8000);
-
-    fetch(LOOKUP_URL, { method: "GET" })
-      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-      .then(function (list) {
-        if (done) return;
-        done = true; clearTimeout(timer);
-
-        if (!Array.isArray(list) || list.length === 0) {
-          // Legitimately empty until the first property import runs. An empty
-          // dropdown would be a dead end, so this is a fallback, not an error.
-          useFreeText("建物名を直接ご入力ください。");
-          return;
-        }
-
-        propSelect.innerHTML = "";
-        var ph = document.createElement("option");
-        ph.value = ""; ph.textContent = "選択してください";
-        propSelect.appendChild(ph);
-
-        list.forEach(function (item) {
-          if (!item || !item.name) return;
-          var o = document.createElement("option");
-          o.value = item.name;
-          o.textContent = item.name;
-          propSelect.appendChild(o);
-          propertyIds[item.name] = item.id || "";
-        });
-      })
-      .catch(function () {
-        if (done) return;
-        done = true; clearTimeout(timer);
-        useFreeText("一覧を取得できませんでした。建物名を直接ご入力ください。");
-      });
-  }
-  loadProperties();
 
   // ---------------------------------------------------------------------
   // Photo: downscale on the device before encoding. A raw 5 MB phone photo
@@ -574,8 +518,7 @@
     return !bad;
   }
   function propertyValue() {
-    return freeTextMode ? String(propFree.value || "").trim()
-                        : String(propSelect.value || "").trim();
+    return String(propInput.value || "").trim();
   }
   function entryValue() {
     var r = form.querySelector('input[name="entryPermission"]:checked');
@@ -620,7 +563,7 @@
     var name = propertyValue();
     var body = {
       propertyName: name,
-      propertyId: propertyIds[name] || "",
+      propertyId: "",
       roomNo: val("roomNo"),
       content: val("content"),
       noticedDate: val("noticedDate"),
