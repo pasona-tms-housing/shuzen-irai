@@ -478,11 +478,29 @@ def patch(tpl_bytes, values):
             out.append(new)
         xml = xml[:rm.start(2)] + "".join(out) + xml[rm.end(2):]
 
+    # calcChain.xml caches which cells hold formulas and in what order. We have just
+    # replaced formulas with literal values, so it now points at cells that have none
+    # and Excel repairs the file on open ("Removed Records: Formula from
+    # /xl/calcChain.xml"). It is a cache, not data - drop it and Excel rebuilds it.
+    CHAIN = "xl/calcChain.xml"
+    keep = [n for n in names if n != CHAIN]
+
     buf = io.BytesIO()
     zout = zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED)
-    order = [n for n in names if n == "[Content_Types].xml"] + [n for n in names if n != "[Content_Types].xml"]
+    order = [n for n in keep if n == "[Content_Types].xml"] + [n for n in keep if n != "[Content_Types].xml"]
     for n in order:
-        data = xml.encode("utf-8") if n == sheet else zin.read(n)
+        if n == sheet:
+            data = xml.encode("utf-8")
+        elif n == "[Content_Types].xml":
+            ct = zin.read(n).decode("utf-8")
+            ct = re.sub(r'<Override[^>]*PartName="/xl/calcChain\.xml"[^>]*/>', "", ct)
+            data = ct.encode("utf-8")
+        elif n == "xl/_rels/workbook.xml.rels":
+            rl = zin.read(n).decode("utf-8")
+            rl = re.sub(r'<Relationship[^>]*Target="calcChain\.xml"[^>]*/>', "", rl)
+            data = rl.encode("utf-8")
+        else:
+            data = zin.read(n)
         zout.writestr(zin.getinfo(n), data)
     zout.close()
     return buf.getvalue()
