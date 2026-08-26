@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<!-- 社内向けツール。入居者向けページではありません。
+     ファイルはブラウザ内でのみ処理され、送信・保存されません。
+     ソース: bpr-toolkit .scratch/nyukyo-annai-app/web/index.html -->
+<title>入居案内書 作成ツール</title>
+<style>
+  :root{
+    --paper:#F4F6F8; --card:#FFF; --ink:#16212E; --soft:#4C5D71; --faint:#7B8CA0;
+    --rule:#D6DEE6; --accent:#3E6FA8; --accent-soft:#EAF0F7;
+    --ok:#2C7A5B; --ok-soft:#E9F4EF; --warn:#B01419; --warn-soft:#FBEDED;
+    --sans:"Meiryo","メイリオ","Hiragino Sans","Yu Gothic UI",sans-serif;
+    --mono:Consolas,"Courier New",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.8}
+  .wrap{max-width:860px;margin:0 auto;padding:2rem 1.2rem 4rem}
+  h1{font-size:1.6rem;margin:0 0 .3rem}
+  .lede{color:var(--soft);margin:0 0 1.6rem}
+  fieldset{border:1px solid var(--rule);border-radius:5px;background:var(--card);
+           padding:1.1rem 1.2rem;margin:0 0 1rem}
+  legend{font-weight:700;font-size:.95rem;padding:0 .4rem}
+  label{display:block;font-size:.9rem;font-weight:700;margin:.7rem 0 .2rem}
+  label:first-of-type{margin-top:0}
+  input[type=text],input[type=date],input[type=number],input[type=file]{
+    width:100%;padding:.5rem .6rem;border:1px solid var(--rule);border-radius:4px;
+    font:inherit;font-size:.95rem;background:#fff}
+  .hint{font-size:.8rem;color:var(--faint);font-weight:400;margin-top:.15rem}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem}
+  @media(max-width:640px){.row{grid-template-columns:1fr}}
+  button{font:inherit;font-weight:700;padding:.7rem 1.4rem;border-radius:5px;border:0;
+         background:var(--accent);color:#fff;cursor:pointer}
+  button:disabled{background:#9DB2C9;cursor:not-allowed}
+  button.link{background:none;color:var(--accent);padding:0;font-weight:700;
+              text-decoration:underline;font-size:.88rem}
+  button.link:disabled{color:var(--faint)}
+  #log{font-family:var(--mono);font-size:.82rem;background:#0E1620;color:#D5E0EC;
+       border-radius:5px;padding:.9rem 1rem;min-height:7rem;max-height:22rem;overflow:auto;
+       white-space:pre-wrap;margin-top:1rem}
+  #log .ok{color:#7BD1A8} #log .err{color:#FF9AA0} #log .warn{color:#F0C674}
+  .status{font-size:.85rem;color:var(--faint);margin-top:.5rem}
+  .note{background:var(--accent-soft);border-left:3px solid var(--accent);
+        padding:.7rem .9rem;border-radius:4px;font-size:.88rem;margin-top:.8rem}
+  .files{font-size:.85rem;margin-top:.6rem}
+  .files div{padding:.15rem 0}
+  .files .y{color:var(--ok)} .files .n{color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>入居案内書 作成ツール</h1>
+  <p class="lede">空き物件リストから物件情報を読み取り、入居案内書のExcelを作成します。<br>
+  ファイルはこのブラウザの中だけで処理され、どこにも送信されません。</p>
+
+  <fieldset>
+    <legend>1. 空き物件リストを選ぶ</legend>
+    <label for="akibukken">空き物件リスト（最新版）</label>
+    <input type="file" id="akibukken" accept=".xlsx">
+    <div class="hint">毎回、最新のものを選んでください。</div>
+    <div class="files" id="aklist"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>2. テンプレート</legend>
+    <div class="files" id="tpllist"></div>
+    <div id="tplpick" hidden>
+      <label for="templates">テンプレート（単身・シェア）</label>
+      <input type="file" id="templates" multiple accept=".xlsx">
+      <div class="hint">2つまとめて選択できます。中身で自動判別し、このブラウザに保存します。</div>
+    </div>
+    <div style="margin-top:.6rem">
+      <button type="button" id="tplchange" class="link">テンプレートを変更する</button>
+    </div>
+    <div class="note">テンプレートは一度選べば保存され、次回からは選び直す必要がありません。<br>
+    FMTが更新されたときだけ「変更する」から入れ替えてください。</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>3. 物件と入力項目</legend>
+    <label for="bukkenId">物件ID</label>
+    <input type="text" id="bukkenId" placeholder="例: 5415310" autocomplete="off">
+    <div class="row">
+      <div>
+        <label for="nyukyobi">ご入居可能日</label>
+        <input type="text" id="nyukyobi" placeholder="例: いつでも可 / 2026/09/15">
+      </div>
+      <div>
+        <label for="curtainQty">カーテン 必要数</label>
+        <input type="text" id="curtainQty" placeholder="例: 2 / 設置済">
+      </div>
+    </div>
+    <label for="curtainSize">カーテン サイズ</label>
+    <input type="text" id="curtainSize" placeholder="例: 添付資料を確認して下さい">
+    <div class="hint">カーテンは空き物件リストに項目がないため、手入力です（O ドライブの資料をご確認ください）。</div>
+    <div class="note">氏名は空き物件リストの「現入居者」から取り込みます。シェアの場合は「/」で区切られた2名を自動で振り分けます。</div>
+  </fieldset>
+
+  <button id="go" disabled>入居案内書を作成する</button>
+  <div class="status" id="status">Python を読み込んでいます…</div>
+  <div id="log"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/pyodide/v0.26.2/full/pyodide.js"></script>
+<script>
+(function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+  const logEl = $("log");
+  function log(msg, cls){
+    const s = document.createElement("span");
+    if (cls) s.className = cls;
+    s.textContent = msg + "\n";
+    logEl.appendChild(s); logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ---- the field map. Mirrors scripts/field-map.json; keep them in step. ----
+  const MAP = {
+    awaji: {
+      sheetTest: n => n.trim() === "淡路", headerRow: 1, idCol: 0,
+      nameCol: 9, furnitureCol: 6, statusCol: 4,
+      cells: {
+        C10:[2], H10:[3], C11:[13], E11:[14], C12:[17], H12:[18],
+        C13:[32], H13:[33], C15:[26], C16:[19], C17:[20],
+        D18:[21], D19:[28],
+        D20:[43,1000], D21:[44,100], D22:[45,300],
+        C23:[[23,25]],
+        D27:[34], H27:[35], C28:[37], C29:[36], C30:[46],
+        C34:[39], F34:[40], C39:[41], F39:[42]
+      }
+    },
+    jisha: {
+      sheetTest: n => n.trim() === "自社寮", headerRow: 0, idCol: 0,
+      nameCol: 8, furnitureCol: 11, statusCol: 5,
+      cells: {
+        C10:[2], H10:[3], E11:[4], C12:[12], H12:[13],
+        C15:[16], C16:[14], C17:[15], D18:[17],
+        D20:[30,1], D21:[31,1], D22:[32,1],
+        D27:[24], H27:[25], C28:[27], C29:[26], C34:[29]
+      }
+    }
+  };
+  const BLANK = "ー";
+
+  let pyodide = null, picked = {akibukken:null, tanshin:null, share:null};
+
+  // ---- template storage. IndexedDB, not localStorage: the templates are ~800KB
+  // each and localStorage is a ~5MB string store that would be tight and lossy. ----
+  const DB = "nyukyo-annai", STORE = "templates";
+  function idb(){
+    return new Promise((res, rej) => {
+      const r = indexedDB.open(DB, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => rej(r.error);
+    });
+  }
+  async function tplSave(key, rec){
+    const db = await idb();
+    await new Promise((res, rej) => {
+      const t = db.transaction(STORE, "readwrite");
+      t.objectStore(STORE).put(rec, key);
+      t.oncomplete = res; t.onerror = () => rej(t.error);
+    });
+  }
+  async function tplLoad(key){
+    const db = await idb();
+    return new Promise((res) => {
+      const rq = db.transaction(STORE, "readonly").objectStore(STORE).get(key);
+      rq.onsuccess = () => res(rq.result || null);
+      rq.onerror = () => res(null);
+    });
+  }
+
+  function drawTpl(){
+    const fl = $("tpllist"); fl.innerHTML = "";
+    [["単身","tanshin"],["シェア","share"]].forEach(([label,key]) => {
+      const d = document.createElement("div");
+      const got = picked[key];
+      d.className = got ? "y" : "n";
+      d.textContent = got
+        ? "✓ テンプレート（" + label + "）  " + got.name + "　保存日 " + got.saved
+        : "・ テンプレート（" + label + "）　（未保存）";
+      fl.appendChild(d);
+    });
+  }
+  function drawAk(){
+    const fl = $("aklist"); fl.innerHTML = "";
+    const d = document.createElement("div");
+    d.className = picked.akibukken ? "y" : "n";
+    d.textContent = picked.akibukken ? "✓ " + picked.akibukken.name : "・ （未選択）";
+    fl.appendChild(d);
+  }
+
+  $("tplchange").addEventListener("click", () => {
+    $("tplpick").hidden = !$("tplpick").hidden;
+  });
+
+  $("akibukken").addEventListener("change", async e => {
+    picked.akibukken = null;
+    const f = e.target.files[0];
+    if (f){
+      const buf = await f.arrayBuffer();
+      try{
+        const names = XLSX.read(buf, {bookSheets:true}).SheetNames;
+        if (names.some(n => n.trim() === "淡路")) picked.akibukken = {name:f.name, buf};
+        else log("空き物件リストではないようです（「淡路」シートがありません）: " + f.name, "err");
+      }catch(err){ log("読み込めません: " + f.name, "err"); }
+    }
+    drawAk(); refresh();
+  });
+
+  $("templates").addEventListener("change", async e => {
+    const today = new Date().toISOString().slice(0,10);
+    for (const f of e.target.files){
+      const buf = await f.arrayBuffer();
+      let names = [];
+      try { names = XLSX.read(buf, {bookSheets:true}).SheetNames; }
+      catch(err){ log("読み込めません: " + f.name, "err"); continue; }
+      let key = null;
+      if (names.some(n => n.indexOf("単身") >= 0))        key = "tanshin";
+      else if (names.some(n => n.indexOf("シェア") >= 0)) key = "share";
+      if (!key){ log("種類が判別できません: " + f.name, "warn"); continue; }
+      const rec = {name:f.name, saved:today, bytes:new Uint8Array(buf)};
+      picked[key] = {name:rec.name, saved:rec.saved, buf:rec.bytes.buffer};
+      try{ await tplSave(key, rec); log("テンプレートを保存しました: " + f.name, "ok"); }
+      catch(err){ log("保存できませんでした（今回のみ有効）: " + err, "warn"); }
+    }
+    drawTpl(); refresh();
+  });
+
+  function refresh(){
+    $("go").disabled = !(pyodide && picked.akibukken && (picked.tanshin || picked.share));
+  }
+
+  // ---- Python: patch the template package, preserving everything else ----
+  const PYCODE = String.raw`
+import io, re, zipfile
+
+def col_index(ref):
+    m = re.match(r"([A-Z]+)(\d+)", ref)
+    c, n = m.group(1), 0
+    for ch in c:
+        n = n * 26 + (ord(ch) - 64)
+    return n, int(m.group(2))
+
+def esc(s):
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+def build_cell(ref, style, value, numeric):
+    st = (' s="%s"' % style) if style else ""
+    if numeric:
+        return '<c r="%s"%s><v>%s</v></c>' % (ref, st, value)
+    return '<c r="%s"%s t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>' % (ref, st, esc(value))
+
+def patch(tpl_bytes, values):
+    """values: {cell_ref: (text, is_numeric)}. Returns new xlsx bytes."""
+    zin = zipfile.ZipFile(io.BytesIO(tpl_bytes))
+    names = zin.namelist()
+    sheet = [n for n in names if re.match(r"xl/worksheets/sheet\d+\.xml$", n)][0]
+    xml = zin.read(sheet).decode("utf-8")
+
+    for ref, (val, numeric) in values.items():
+        want_c, want_r = col_index(ref)
+        # existing cell?
+        m = re.search(r'<c r="%s"(?: [^>]*)?/>|<c r="%s"(?: [^>]*)?>.*?</c>' % (ref, ref), xml, re.S)
+        if m:
+            style = re.search(r'\bs="(\d+)"', m.group(0))
+            xml = xml[:m.start()] + build_cell(ref, style.group(1) if style else None, val, numeric) + xml[m.end():]
+            continue
+        # cell absent: insert into its row, in column order
+        rm = re.search(r'(<row [^>]*r="%d"[^>]*>)(.*?)(</row>)' % want_r, xml, re.S)
+        if not rm:
+            continue  # row itself absent; skip rather than invent structure
+        body = rm.group(2)
+        new = build_cell(ref, None, val, numeric)
+        placed = False
+        out = []
+        for cm in re.finditer(r'<c r="([A-Z]+\d+)"(?: [^>]*)?/>|<c r="([A-Z]+\d+)"(?: [^>]*)?>.*?</c>', body, re.S):
+            cref = cm.group(1) or cm.group(2)
+            cn, _ = col_index(cref)
+            if not placed and cn > want_c:
+                out.append(new); placed = True
+            out.append(cm.group(0))
+        if not placed:
+            out.append(new)
+        xml = xml[:rm.start(2)] + "".join(out) + xml[rm.end(2):]
+
+    buf = io.BytesIO()
+    zout = zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED)
+    order = [n for n in names if n == "[Content_Types].xml"] + [n for n in names if n != "[Content_Types].xml"]
+    for n in order:
+        data = xml.encode("utf-8") if n == sheet else zin.read(n)
+        zout.writestr(zin.getinfo(n), data)
+    zout.close()
+    return buf.getvalue()
+`;
+
+  (async function boot(){
+    try{
+      for (const key of ["tanshin","share"]){
+        try{
+          const rec = await tplLoad(key);
+          if (rec) picked[key] = {name:rec.name, saved:rec.saved, buf:rec.bytes.buffer};
+        }catch(err){ /* first run, or storage blocked */ }
+      }
+      drawTpl(); drawAk();
+      if (!picked.tanshin && !picked.share) $("tplpick").hidden = false;
+
+      pyodide = await loadPyodide();
+      pyodide.runPython(PYCODE);
+      $("status").textContent = "準備できました。ファイルを選んでください。";
+      log("Python 準備完了", "ok");
+      refresh();
+    }catch(err){
+      $("status").textContent = "Python の読み込みに失敗しました。";
+      log("Pyodide の読み込みに失敗: " + err, "err");
+    }
+  })();
+
+  // ---- main ----
+  $("go").addEventListener("click", async () => {
+    logEl.innerHTML = "";
+    const id = $("bukkenId").value.trim();
+    if (!id){ log("物件IDを入力してください", "err"); return; }
+    $("go").disabled = true;
+    try{
+      const wb = XLSX.read(picked.akibukken.buf, {type:"array"});
+      let spec = null, rows = null, hit = null;
+
+      for (const key of ["awaji","jisha"]){
+        const s = MAP[key];
+        const sname = wb.SheetNames.find(s.sheetTest);
+        if (!sname) continue;
+        const all = XLSX.utils.sheet_to_json(wb.Sheets[sname], {header:1, defval:""});
+        const body = all.slice(s.headerRow + 1);
+        const r = body.find(r => String(r[s.idCol]).trim() === id);
+        if (r){ spec = s; rows = all; hit = r; log("見つかりました: シート「" + sname + "」", "ok"); break; }
+      }
+      if (!hit){ log("物件ID " + id + " が見つかりません", "err"); $("go").disabled=false; return; }
+
+      const g = i => { const v = hit[i]; return (v===undefined||v===null||String(v).trim()==="") ? "" : String(v).trim(); };
+      const furniture = g(spec.furnitureCol), status = g(spec.statusCol);
+
+      if (/ワーケーション|ﾜｰｹ/.test(furniture + status)){
+        log("この物件はワーケーションです。入居案内書は作成しません。", "err");
+        $("go").disabled = false; return;
+      }
+      const isShare = /ｼｪｱ|シェア/.test(furniture + status);
+      log("区分: " + (isShare ? "シェア" : "単身"));
+
+      const tpl = isShare ? picked.share : picked.tanshin;
+      if (!tpl){ log("この区分のテンプレートが選択されていません", "err"); $("go").disabled=false; return; }
+
+      // names
+      const names = g(spec.nameCol).split("/").map(s => s.trim()).filter(Boolean);
+      const values = {};
+      values["B3"] = [names[0] || BLANK, false];
+      if (isShare) values["F3"] = [names[1] || BLANK, false];
+      if (names.length > 2) log("氏名が3名以上です（" + names.length + "名）。2名分のみ記入しました。", "warn");
+
+      // mapped cells
+      for (const [cell, def] of Object.entries(spec.cells)){
+        let raw, numeric = false;
+        if (Array.isArray(def[0])){
+          const sum = def[0].reduce((a,i)=> a + (parseFloat(String(hit[i]).replace(/,/g,"")) || 0), 0);
+          raw = sum; numeric = true;
+        } else {
+          const v = g(def[0]);
+          if (def.length > 1){
+            const n = parseFloat(String(v).replace(/,/g,"")) || 0;
+            raw = n * def[1]; numeric = true;
+          } else {
+            raw = v;
+            const n = String(v).replace(/,/g,"");
+            if (n !== "" && !isNaN(n) && /^[0-9.\-]+$/.test(n)) { raw = parseFloat(n); numeric = true; }
+          }
+        }
+        if (!numeric && (raw === "" || raw === undefined)) raw = BLANK;
+        values[cell] = [raw, numeric];
+      }
+
+      // operator inputs
+      if ($("nyukyobi").value.trim())    values["C7"]  = [$("nyukyobi").value.trim(), false];
+      values["D24"] = [$("curtainQty").value.trim()  || BLANK, false];
+      values["D25"] = [$("curtainSize").value.trim() || BLANK, false];
+
+      log("記入するセル: " + Object.keys(values).length + " 件");
+
+      const py = pyodide.globals.get("patch");
+      const out = py(new Uint8Array(tpl.buf), pyodide.toPy(values));
+      const bytes = out.toJs();
+      out.destroy(); py.destroy();
+
+      const fname = "入居案内書_" + (g(2) || "物件") + "_" + (g(3) || "") + "_" +
+                    new Date().toISOString().slice(0,10).replace(/-/g,"") + ".xlsx";
+      const blob = new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = fname; a.click();
+      URL.revokeObjectURL(a.href);
+      log("作成しました: " + fname, "ok");
+      log("PDF化フォルダに保存すると、自動でPDFになります。");
+    }catch(err){
+      log("エラー: " + (err && err.message ? err.message : err), "err");
+    }
+    $("go").disabled = false;
+  });
+})();
+</script>
+</body>
+</html>
