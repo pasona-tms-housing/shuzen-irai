@@ -257,8 +257,23 @@ def build_cell(ref, style, value, numeric):
         return '<c r="%s"%s><v>%s</v></c>' % (ref, st, value)
     return '<c r="%s"%s t="inlineStr"><is><t xml:space="preserve">%s</t></is></c>' % (ref, st, esc(value))
 
+def _as_bytes(x):
+    # Pyodide passes a JS Uint8Array across as a JsProxy, not as bytes.
+    if isinstance(x, (bytes, bytearray)):
+        return bytes(x)
+    if hasattr(x, "to_py"):
+        return bytes(x.to_py())
+    return bytes(x)
+
+def _as_dict(x):
+    if hasattr(x, "to_py"):
+        x = x.to_py()
+    return {k: (list(v) if not isinstance(v, (list, tuple)) else v) for k, v in dict(x).items()}
+
 def patch(tpl_bytes, values):
     """values: {cell_ref: (text, is_numeric)}. Returns new xlsx bytes."""
+    tpl_bytes = _as_bytes(tpl_bytes)
+    values = _as_dict(values)
     zin = zipfile.ZipFile(io.BytesIO(tpl_bytes))
     names = zin.namelist()
     sheet = [n for n in names if re.match(r"xl/worksheets/sheet\d+\.xml$", n)][0]
@@ -393,8 +408,9 @@ def patch(tpl_bytes, values):
 
       const py = pyodide.globals.get("patch");
       const out = py(new Uint8Array(tpl.buf), pyodide.toPy(values));
-      const bytes = out.toJs();
-      out.destroy(); py.destroy();
+      const bytes = (out && typeof out.toJs === "function") ? out.toJs() : out;
+      if (out && typeof out.destroy === "function") out.destroy();
+      py.destroy();
 
       const fname = "入居案内書_" + (g(2) || "物件") + "_" + (g(3) || "") + "_" +
                     new Date().toISOString().slice(0,10).replace(/-/g,"") + ".xlsx";
