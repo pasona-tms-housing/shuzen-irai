@@ -253,17 +253,17 @@
   const BLANK = "ー";
   const KAGUDAI = 4000;          // flat, confirmed 2026-08-26
 
-  // Where the 家具代 / その他①② lines are written, once the template has rows for
-  // them. C23 is その他費用 today and C24/C25 are カーテン, so writing there now would
-  // overwrite the curtain fields. Until the layout change is made this stays null and
-  // the three amounts are combined into the single existing その他費用 cell.
-  // When the template gains its extra row, set this to the new cells:
-  //   {kaguLabel:"C23", kaguValue:"D23", o1Label:"C24", o1Value:"D24",
-  //    o2Label:"C25",   o2Value:"D25"}
+  // Where the 家具代 / その他①② lines are written. The templates gained a その他費用
+  // block at G20:J22 on 2026-08-27, mirroring ファシリティ費: G is the merged yellow
+  // label, H the item name, I the amount, J the 円. 合計金額 is SUM(...) and includes
+  // I20:I22, so an amount written here reaches the total without further wiring.
+  // Setting this back to null falls back to combining all three into one その他費用 cell.
+  // An absent その他 must leave its row BLANK — a dash or a zero on a fee list reads as
+  // "provided at no charge", which is a different statement.
   const FEE_ROWS = {
-    kaguLabel:"H20", kaguValue:"I20",
-    o1Label:"H21",   o1Value:"I21",
-    o2Label:"H22",   o2Value:"I22"
+    kaguLabel:"H20", kaguValue:"I20", kaguUnit:"J20",
+    o1Label:"H21",   o1Value:"I21",   o1Unit:"J21",
+    o2Label:"H22",   o2Value:"I22",   o2Unit:"J22"
   };
 
   let pyodide = null, picked = {akibukken:null, tanshin:null, share:null};
@@ -585,8 +585,15 @@ def patch(tpl_bytes, values):
 
       // その他: title comes from the data. Absent title => leave BOTH cells blank,
       // because a dash or a zero reads as "included at no charge".
-      const o1t = g("other1"), o1f = o1t ? num(g("other1Fee")) : 0;
-      const o2t = g("other2"), o2f = o2t ? num(g("other2Fee")) : 0;
+      //
+      // Akibukken spells "no その他" as the literal string "0", not as an empty cell:
+      // 473 of 564 淡路 rows for その他① and 552 for その他②. A plain truthiness test
+      // treats that as a real fee name and prints a line labelled 0 on most properties.
+      const noneish = t => !t || /^[0０\-ー―]+$/.test(t) || t === "なし";
+      const hasTitle = t => !noneish(t);
+      const o1r = g("other1"), o2r = g("other2");
+      const o1t = hasTitle(o1r) ? o1r : "", o1f = o1t ? num(g("other1Fee")) : 0;
+      const o2t = hasTitle(o2r) ? o2r : "", o2f = o2t ? num(g("other2Fee")) : 0;
 
       const total = rent + common + park + aircon + light + stove + kagu + o1f + o2f;
       log("内訳: 家賃 " + rent + " / 共益 " + common + " / 駐車 " + park +
@@ -607,12 +614,18 @@ def patch(tpl_bytes, values):
       if (FEE_ROWS){
         put(FEE_ROWS.kaguLabel, "家具代", false);
         put(FEE_ROWS.kaguValue, kagu, true);
+        if (FEE_ROWS.kaguUnit) put(FEE_ROWS.kaguUnit, "円", false);
         // An absent その他 leaves BOTH cells blank. A dash or a zero would read as
         // "provided at no charge", which is not what a missing entry means.
-        if (o1t){ put(FEE_ROWS.o1Label, o1t, false); put(FEE_ROWS.o1Value, o1f, true); }
-        else    { put(FEE_ROWS.o1Label, "", false);  put(FEE_ROWS.o1Value, "", false); }
-        if (o2t){ put(FEE_ROWS.o2Label, o2t, false); put(FEE_ROWS.o2Value, o2f, true); }
-        else    { put(FEE_ROWS.o2Label, "", false);  put(FEE_ROWS.o2Value, "", false); }
+        // The 円 lives in the template, so a blank row would otherwise leave a
+        // dangling unit with nothing beside it. Write it with the row, not around it.
+        const feeRow = (l, v, u, title, amount) => {
+          put(l, title || "", false);
+          put(v, title ? amount : "", !!title);
+          if (u) put(u, title ? "円" : "", false);
+        };
+        feeRow(FEE_ROWS.o1Label, FEE_ROWS.o1Value, FEE_ROWS.o1Unit, o1t, o1f);
+        feeRow(FEE_ROWS.o2Label, FEE_ROWS.o2Value, FEE_ROWS.o2Unit, o2t, o2f);
       } else {
         put("C23", kagu + o1f + o2f, true);
         log("テンプレートに家具代・その他①②の行がないため、その他費用にまとめました。", "warn");
