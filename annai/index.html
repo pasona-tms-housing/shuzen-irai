@@ -4,9 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<!-- 社内向けツール（試作）。入居者向けページではありません。
-     ファイルはブラウザ内でのみ処理され、送信・保存されません。
-     ソース: bpr-toolkit .scratch/nyukyo-annai-app/web/index.html -->
+<!-- 社内向けツール（試作）。入居者向けページではありません。 -->
 <title>入居案内書 作成ツール</title>
 <style>
   :root{
@@ -549,7 +547,14 @@ def patch(tpl_bytes, values):
       const num = v => { const n = parseFloat(String(v).replace(/,/g,"")); return isNaN(n) ? 0 : n; };
 
       // --- fees -------------------------------------------------------------
-      const rent    = num(g("rent")),   common = num(g("common")), park = num(g("parkFee"));
+      const rent = num(g("rent")), common = num(g("common"));
+      // 駐車場代 is not always a number. Some rows carry a note instead, e.g.
+      // 駐車場代別(PG駐車場貸出のため社宅担当に連絡ください). Keep the note, and
+      // contribute 0 to the total rather than parsing it to 0 and losing the text.
+      const parkRaw = g("parkFee");
+      const parkIsNum = parkRaw !== "" && /^-?[\d,]+(\.\d+)?$/.test(parkRaw);
+      const park = parkIsNum ? num(parkRaw) : 0;
+      if (parkRaw && !parkIsNum) log("駐車場代が金額ではないため、文言をそのまま記載します: " + parkRaw, "warn");
       const aircon  = num(g("aircon")) * (spec === MAP.awaji ? 1000 : 1);
       const light   = num(g("light"))  * (spec === MAP.awaji ? 100  : 1);
       const stove   = num(g("stove"))  * (spec === MAP.awaji ? 300  : 1);
@@ -571,7 +576,7 @@ def patch(tpl_bytes, values):
       put("C15", total, true);
       put("C16", rent, true);
       put("C17", common, true);
-      put("D18", park, true);
+      put("D18", parkIsNum ? park : (parkRaw || BLANK), parkIsNum);
       put("D19", g("parkNo") || BLANK, false);
       put("D20", aircon, true); put("D21", light, true); put("D22", stove, true);
 
