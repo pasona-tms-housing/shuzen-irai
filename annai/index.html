@@ -118,32 +118,131 @@
     logEl.appendChild(s); logEl.scrollTop = logEl.scrollHeight;
   }
 
-  // ---- the field map. Mirrors scripts/field-map.json; keep them in step. ----
+  // ---- Field map. Columns are found by HEADER TEXT, never by position.
+  // The Akibukken layout has already changed once: the 2026-08-17 export has four
+  // fewer columns than the current one, so a fixed index silently reads the wrong
+  // field. Anything unresolved is reported rather than guessed. ----
   const MAP = {
     awaji: {
-      sheetTest: n => n.trim() === "淡路", headerRow: 1, idCol: 0,
-      nameCol: 9, furnitureCol: 6, statusCol: 4,
+      sheet: n => n.trim() === "淡路", headerRow: 1,
+      cols: {
+        id:        {eq:"物件ID"},
+        name:      {eq:"物件"},
+        room:      {eq:"部屋番号"},
+        status:    {re:/^空き状況/},
+        furniture: {re:/^家具/},
+        resident:  {re:/^現入居者/},
+        post:      {eq:"郵便番号"},
+        addr:      {re:/^物件住所/},
+        layout:    {re:/^間取り/},
+        area:      {re:/^面積/},
+        rent:      {re:/^家賃/, not:/その他/},
+        common:    {re:/^共益費/},
+        parkFee:   {re:/^駐車場代/},
+        total:     {re:/^家賃その他合計/},
+        parkNo:    {re:/^駐車場番号/},
+        mgmt:      {re:/^管理会社名/},
+        mgmtTel:   {re:/^管理会社電話/},
+        other1:    {eq:"その他①"},
+        other1Fee: {re:/^費用/, after:"other1"},
+        other2:    {eq:"その他②"},
+        other2Fee: {re:/^費用/, after:"other2"},
+        busStop:   {re:/シャトルバス停/},
+        walk:      {re:/バス停まで徒歩/},
+        internet:  {re:/^インターネット/},
+        postdial:  {re:/^ポストダイヤル/},
+        gas:       {re:/^ガス契約先/},
+        gasTel:    {re:/^連絡先/, after:"gas"},
+        water:     {re:/^水道契約先/},
+        waterTel:  {re:/^連絡先/, after:"water"},
+        aircon:    {re:/^エアコン/},
+        light:     {re:/^シーリング|ライト/},
+        stove:     {re:/コンロ/},
+        remarks:   {re:/備考/, and:/入居者/}
+      },
       cells: {
-        C10:[2], H10:[3], C11:[13], E11:[14], C12:[17], H12:[18],
-        C13:[32], H13:[33], C15:[26], C16:[19], C17:[20],
-        D18:[21], D19:[28],
-        D20:[43,1000], D21:[44,100], D22:[45,300],
-        C23:[[23,25]],
-        D27:[34], H27:[35], C28:[37], C29:[36], C30:[46],
-        C34:[39], F34:[40], C39:[41], F39:[42]
-      }
+        C10:{c:"name"}, H10:{c:"room"}, C11:{c:"post"}, E11:{c:"addr"},
+        C12:{c:"layout"}, H12:{c:"area"}, C13:{c:"mgmt"}, H13:{c:"mgmtTel"},
+        C15:{c:"total"}, C16:{c:"rent"}, C17:{c:"common"},
+        D18:{c:"parkFee"}, D19:{c:"parkNo"},
+        D20:{c:"aircon", x:1000}, D21:{c:"light", x:100}, D22:{c:"stove", x:300},
+        C23:{sum:["other1Fee","other2Fee"]},
+        D27:{c:"busStop"}, H27:{c:"walk"},
+        C28:{c:"postdial"}, C29:{c:"internet"}, C30:{c:"remarks"},
+        C34:{c:"gas"}, F34:{c:"gasTel"}, C39:{c:"water"}, F39:{c:"waterTel"}
+      },
+      required: ["id","name","room","rent","busStop","walk","internet","postdial","gas","water"]
     },
     jisha: {
-      sheetTest: n => n.trim() === "自社寮", headerRow: 0, idCol: 0,
-      nameCol: 8, furnitureCol: 11, statusCol: 5,
+      sheet: n => n.trim() === "自社寮", headerRow: 0,
+      cols: {
+        id:        {re:/^ID/},
+        name:      {re:/^物件名/},
+        room:      {re:/^部屋番号/},
+        status:    {re:/空き/},
+        furniture: {re:/^家具/},
+        resident:  {re:/^入居者$/},
+        addr:      {re:/^住所/},
+        layout:    {re:/^間取り/},
+        area:      {re:/^広さ/},
+        rent:      {re:/^家賃$/},
+        common:    {re:/^共益費/},
+        total:     {re:/^家賃その他合計/},
+        parkFee:   {re:/^駐車場代/},
+        busStop:   {re:/^バス停$/},
+        walk:      {re:/バス停まで徒歩/},
+        internet:  {re:/^インターネット/},
+        postdial:  {re:/^ポストダイヤル/},
+        gas:       {re:/^ガス契約先/},
+        aircon:    {re:/^エアコン/},
+        light:     {re:/^ライト|^シーリング/},
+        stove:     {re:/コンロ/}
+      },
       cells: {
-        C10:[2], H10:[3], E11:[4], C12:[12], H12:[13],
-        C15:[16], C16:[14], C17:[15], D18:[17],
-        D20:[30,1], D21:[31,1], D22:[32,1],
-        D27:[24], H27:[25], C28:[27], C29:[26], C34:[29]
-      }
+        C10:{c:"name"}, H10:{c:"room"}, E11:{c:"addr"},
+        C12:{c:"layout"}, H12:{c:"area"},
+        C15:{c:"total"}, C16:{c:"rent"}, C17:{c:"common"}, D18:{c:"parkFee"},
+        D20:{c:"aircon", x:1}, D21:{c:"light", x:1}, D22:{c:"stove", x:1},
+        D27:{c:"busStop"}, H27:{c:"walk"},
+        C28:{c:"postdial"}, C29:{c:"internet"}, C34:{c:"gas"}
+      },
+      required: ["id","name","rent"]
     }
   };
+
+  // Resolve every column key against the header row. Returns {key:index} and a
+  // list of anything that could not be found.
+  function resolveCols(spec, header){
+    const norm = v => String(v == null ? "" : v).replace(/\s+/g, "").trim();
+    const H = header.map(norm);
+    const out = {}, missing = [];
+    const find = (def, from) => {
+      for (let i = (from == null ? 0 : from + 1); i < H.length; i++){
+        const h = H[i];
+        if (!h) continue;
+        if (def.eq  && h !== def.eq) continue;
+        if (def.re  && !def.re.test(h)) continue;
+        if (def.not && def.not.test(h)) continue;
+        if (def.and && !def.and.test(h)) continue;
+        return i;
+      }
+      return -1;
+    };
+    // two passes so `after` can reference a key resolved in the first
+    for (const pass of [0, 1]){
+      for (const [key, def] of Object.entries(spec.cols)){
+        if (out[key] !== undefined) continue;
+        if (def.after && pass === 0) continue;
+        const base = def.after ? out[def.after] : null;
+        if (def.after && base === undefined) continue;
+        const i = find(def, base);
+        if (i >= 0) out[key] = i;
+      }
+    }
+    for (const key of Object.keys(spec.cols)) if (out[key] === undefined) missing.push(key);
+    return {cols: out, missing};
+  }
+
   const BLANK = "ー";
 
   let pyodide = null, picked = {akibukken:null, tanshin:null, share:null};
@@ -345,21 +444,33 @@ def patch(tpl_bytes, values):
     $("go").disabled = true;
     try{
       const wb = XLSX.read(picked.akibukken.buf, {type:"array"});
-      let spec = null, rows = null, hit = null;
+      let spec = null, hit = null, C = null;
 
       for (const key of ["awaji","jisha"]){
-        const s = MAP[key];
-        const sname = wb.SheetNames.find(s.sheetTest);
+        const sp = MAP[key];
+        const sname = wb.SheetNames.find(sp.sheet);
         if (!sname) continue;
         const all = XLSX.utils.sheet_to_json(wb.Sheets[sname], {header:1, defval:""});
-        const body = all.slice(s.headerRow + 1);
-        const r = body.find(r => String(r[s.idCol]).trim() === id);
-        if (r){ spec = s; rows = all; hit = r; log("見つかりました: シート「" + sname + "」", "ok"); break; }
+        const res = resolveCols(sp, all[sp.headerRow] || []);
+        const missReq = sp.required.filter(k => res.cols[k] === undefined);
+        if (missReq.length){
+          log("シート「" + sname + "」の見出しが読み取れません: " + missReq.join(", "), "err");
+          log("空き物件リストの形式が想定と違う可能性があります。最新版をお使いください。", "err");
+          continue;
+        }
+        if (res.missing.length)
+          log("見つからない列（空欄で出力します）: " + res.missing.join(", "), "warn");
+        const r = all.slice(sp.headerRow + 1)
+                     .find(row => String(row[res.cols.id]).trim() === id);
+        if (r){ spec = sp; hit = r; C = res.cols;
+                log("見つかりました: シート「" + sname + "」", "ok"); break; }
       }
       if (!hit){ log("物件ID " + id + " が見つかりません", "err"); $("go").disabled=false; return; }
 
-      const g = i => { const v = hit[i]; return (v===undefined||v===null||String(v).trim()==="") ? "" : String(v).trim(); };
-      const furniture = g(spec.furnitureCol), status = g(spec.statusCol);
+      const g = k => { const i = C[k]; if (i === undefined) return "";
+                       const v = hit[i];
+                       return (v===undefined||v===null||String(v).trim()==="") ? "" : String(v).trim(); };
+      const furniture = g("furniture"), status = g("status");
 
       if (/ワーケーション|ﾜｰｹ/.test(furniture + status)){
         log("この物件はワーケーションです。入居案内書は作成しません。", "err");
@@ -367,36 +478,29 @@ def patch(tpl_bytes, values):
       }
       const isShare = /ｼｪｱ|シェア/.test(furniture + status);
       log("区分: " + (isShare ? "シェア" : "単身"));
+      log("物件: " + g("name") + " " + g("room"));
 
       const tpl = isShare ? picked.share : picked.tanshin;
       if (!tpl){ log("この区分のテンプレートが選択されていません", "err"); $("go").disabled=false; return; }
 
-      // names
-      const names = g(spec.nameCol).split("/").map(s => s.trim()).filter(Boolean);
+      const names = g("resident").split("/").map(x => x.trim()).filter(Boolean);
       const values = {};
       values["B3"] = [names[0] || BLANK, false];
       if (isShare) values["F3"] = [names[1] || BLANK, false];
       if (names.length > 2) log("氏名が3名以上です（" + names.length + "名）。2名分のみ記入しました。", "warn");
 
-      // mapped cells
+      const num = v => { const n = parseFloat(String(v).replace(/,/g,"")); return isNaN(n) ? 0 : n; };
       for (const [cell, def] of Object.entries(spec.cells)){
-        let raw, numeric = false;
-        if (Array.isArray(def[0])){
-          const sum = def[0].reduce((a,i)=> a + (parseFloat(String(hit[i]).replace(/,/g,"")) || 0), 0);
-          raw = sum; numeric = true;
+        if (def.sum){
+          values[cell] = [def.sum.reduce((a,k) => a + num(g(k)), 0), true];
+        } else if (def.x){
+          values[cell] = [num(g(def.c)) * def.x, true];
         } else {
-          const v = g(def[0]);
-          if (def.length > 1){
-            const n = parseFloat(String(v).replace(/,/g,"")) || 0;
-            raw = n * def[1]; numeric = true;
-          } else {
-            raw = v;
-            const n = String(v).replace(/,/g,"");
-            if (n !== "" && !isNaN(n) && /^[0-9.\-]+$/.test(n)) { raw = parseFloat(n); numeric = true; }
-          }
+          const v = g(def.c);
+          const n = v.replace(/,/g,"");
+          if (n !== "" && /^-?\d+(\.\d+)?$/.test(n)) values[cell] = [parseFloat(n), true];
+          else values[cell] = [v || BLANK, false];
         }
-        if (!numeric && (raw === "" || raw === undefined)) raw = BLANK;
-        values[cell] = [raw, numeric];
       }
 
       // operator inputs
@@ -412,7 +516,7 @@ def patch(tpl_bytes, values):
       if (out && typeof out.destroy === "function") out.destroy();
       py.destroy();
 
-      const fname = "入居案内書_" + (g(2) || "物件") + "_" + (g(3) || "") + "_" +
+      const fname = "入居案内書_" + (g("name") || "物件") + "_" + (g("room") || "") + "_" +
                     new Date().toISOString().slice(0,10).replace(/-/g,"") + ".xlsx";
       const blob = new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
       const a = document.createElement("a");
