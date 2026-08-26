@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<!-- 社内向けツール。入居者向けページではありません。
+<!-- 社内向けツール（試作）。入居者向けページではありません。
      ファイルはブラウザ内でのみ処理され、送信・保存されません。
      ソース: bpr-toolkit .scratch/nyukyo-annai-app/web/index.html -->
 <title>入居案内書 作成ツール</title>
@@ -81,8 +81,17 @@
 
   <fieldset>
     <legend>3. 物件と入力項目</legend>
-    <label for="bukkenId">物件ID</label>
-    <input type="text" id="bukkenId" placeholder="例: 5415310" autocomplete="off">
+    <label for="bukkenName">物件名</label>
+    <input type="text" id="bukkenName" list="dl-name" placeholder="入力して絞り込めます"
+           autocomplete="off" disabled>
+    <datalist id="dl-name"></datalist>
+    <div class="hint" id="namehint">空き物件リストを選ぶと一覧が出ます。</div>
+
+    <label for="bukkenRoom">部屋番号</label>
+    <input type="text" id="bukkenRoom" list="dl-room" placeholder="物件名を選ぶと一覧が出ます"
+           autocomplete="off" disabled>
+    <datalist id="dl-room"></datalist>
+    <div class="hint" id="roomhint"></div>
     <div class="row">
       <div>
         <label for="nyukyobi">ご入居可能日</label>
@@ -244,6 +253,16 @@
   }
 
   const BLANK = "ー";
+  const KAGUDAI = 4000;          // flat, confirmed 2026-08-26
+
+  // Where the 家具代 / その他①② lines are written, once the template has rows for
+  // them. C23 is その他費用 today and C24/C25 are カーテン, so writing there now would
+  // overwrite the curtain fields. Until the layout change is made this stays null and
+  // the three amounts are combined into the single existing その他費用 cell.
+  // When the template gains its extra row, set this to the new cells:
+  //   {kaguLabel:"C23", kaguValue:"D23", o1Label:"C24", o1Value:"D24",
+  //    o2Label:"C25",   o2Value:"D25"}
+  const FEE_ROWS = null;
 
   let pyodide = null, picked = {akibukken:null, tanshin:null, share:null};
 
@@ -306,7 +325,7 @@
       const buf = await f.arrayBuffer();
       try{
         const names = XLSX.read(buf, {bookSheets:true}).SheetNames;
-        if (names.some(n => n.trim() === "淡路")) picked.akibukken = {name:f.name, buf};
+        if (names.some(n => n.trim() === "淡路")){ picked.akibukken = {name:f.name, buf}; buildIndex(); }
         else log("空き物件リストではないようです（「淡路」シートがありません）: " + f.name, "err");
       }catch(err){ log("読み込めません: " + f.name, "err"); }
     }
@@ -330,6 +349,63 @@
       catch(err){ log("保存できませんでした（今回のみ有効）: " + err, "warn"); }
     }
     drawTpl(); refresh();
+  });
+
+  // ---- property index: 物件名 -> rooms, built once when the list is loaded ----
+  let INDEX = null;   // {name: [{room, key, row, cols, spec}]}
+
+  function buildIndex(){
+    INDEX = new Map();
+    let skipped = 0;
+    const wb = XLSX.read(picked.akibukken.buf, {type:"array"});
+    for (const key of ["awaji","jisha"]){
+      const sp = MAP[key];
+      const sname = wb.SheetNames.find(sp.sheet);
+      if (!sname) continue;
+      const all = XLSX.utils.sheet_to_json(wb.Sheets[sname], {header:1, defval:""});
+      const res = resolveCols(sp, all[sp.headerRow] || []);
+      const miss = sp.required.filter(k => res.cols[k] === undefined);
+      if (miss.length){
+        log("シート「" + sname + "」の見出しが読み取れません: " + miss.join(", "), "err");
+        continue;
+      }
+      if (res.missing.length)
+        log("「" + sname + "」で見つからない列（空欄で出力）: " + res.missing.join(", "), "warn");
+      for (const row of all.slice(sp.headerRow + 1)){
+        const nm = String(row[res.cols.name] ?? "").trim();
+        if (!nm) continue;
+        const st = String(row[res.cols.status] ?? "") + String(row[res.cols.furniture] ?? "");
+        if (/ワーケーション|ﾜｰｹ/.test(st)){ skipped++; continue; }   // no 入居案内書 for these
+        const room = String(row[res.cols.room] ?? "").trim() || "-";
+        if (!INDEX.has(nm)) INDEX.set(nm, []);
+        INDEX.get(nm).push({room, key, row, cols:res.cols, spec:sp});
+      }
+    }
+    const names = [...INDEX.keys()].sort((a,b) => a.localeCompare(b, "ja"));
+    const dl = $("dl-name"); dl.innerHTML = "";
+    names.forEach(n => { const o = document.createElement("option"); o.value = n; dl.appendChild(o); });
+    $("bukkenName").disabled = false;
+    $("bukkenName").value = ""; $("bukkenRoom").value = ""; $("bukkenRoom").disabled = true;
+    $("namehint").textContent = names.length + " 件の物件名。入力すると絞り込めます。";
+    $("roomhint").textContent = "";
+    log("物件一覧を読み込みました: " + names.length + " 件" +
+        (skipped ? "（ワーケーション " + skipped + " 件は除外）" : ""), "ok");
+  }
+
+  $("bukkenName").addEventListener("input", () => {
+    const nm = $("bukkenName").value.trim();
+    const rooms = (INDEX && INDEX.get(nm)) || null;
+    const dl = $("dl-room"); dl.innerHTML = "";
+    if (!rooms){
+      $("bukkenRoom").disabled = true; $("bukkenRoom").value = "";
+      $("roomhint").textContent = nm ? "一覧にない物件名です。" : "";
+      return;
+    }
+    rooms.map(r => r.room).sort((a,b) => a.localeCompare(b, "ja", {numeric:true}))
+         .forEach(r => { const o = document.createElement("option"); o.value = r; dl.appendChild(o); });
+    $("bukkenRoom").disabled = false;
+    if (rooms.length === 1) $("bukkenRoom").value = rooms[0].room;
+    $("roomhint").textContent = rooms.length + " 室";
   });
 
   function refresh(){
@@ -443,42 +519,23 @@ def patch(tpl_bytes, values):
     if (!id){ log("物件IDを入力してください", "err"); return; }
     $("go").disabled = true;
     try{
-      const wb = XLSX.read(picked.akibukken.buf, {type:"array"});
-      let spec = null, hit = null, C = null;
+      if (!INDEX){ log("空き物件リストを選んでください", "err"); $("go").disabled=false; return; }
+      const nm   = $("bukkenName").value.trim();
+      const room = $("bukkenRoom").value.trim();
+      const rooms = INDEX.get(nm);
+      if (!rooms){ log("物件名が一覧にありません: " + nm, "err"); $("go").disabled=false; return; }
+      const entry = rooms.find(r => r.room === room) || (rooms.length === 1 ? rooms[0] : null);
+      if (!entry){ log("部屋番号を選んでください（" + rooms.length + " 室あります）", "err");
+                   $("go").disabled=false; return; }
 
-      for (const key of ["awaji","jisha"]){
-        const sp = MAP[key];
-        const sname = wb.SheetNames.find(sp.sheet);
-        if (!sname) continue;
-        const all = XLSX.utils.sheet_to_json(wb.Sheets[sname], {header:1, defval:""});
-        const res = resolveCols(sp, all[sp.headerRow] || []);
-        const missReq = sp.required.filter(k => res.cols[k] === undefined);
-        if (missReq.length){
-          log("シート「" + sname + "」の見出しが読み取れません: " + missReq.join(", "), "err");
-          log("空き物件リストの形式が想定と違う可能性があります。最新版をお使いください。", "err");
-          continue;
-        }
-        if (res.missing.length)
-          log("見つからない列（空欄で出力します）: " + res.missing.join(", "), "warn");
-        const r = all.slice(sp.headerRow + 1)
-                     .find(row => String(row[res.cols.id]).trim() === id);
-        if (r){ spec = sp; hit = r; C = res.cols;
-                log("見つかりました: シート「" + sname + "」", "ok"); break; }
-      }
-      if (!hit){ log("物件ID " + id + " が見つかりません", "err"); $("go").disabled=false; return; }
-
+      const spec = entry.spec, hit = entry.row, C = entry.cols;
       const g = k => { const i = C[k]; if (i === undefined) return "";
                        const v = hit[i];
                        return (v===undefined||v===null||String(v).trim()==="") ? "" : String(v).trim(); };
-      const furniture = g("furniture"), status = g("status");
 
-      if (/ワーケーション|ﾜｰｹ/.test(furniture + status)){
-        log("この物件はワーケーションです。入居案内書は作成しません。", "err");
-        $("go").disabled = false; return;
-      }
+      const furniture = g("furniture"), status = g("status");
       const isShare = /ｼｪｱ|シェア/.test(furniture + status);
-      log("区分: " + (isShare ? "シェア" : "単身"));
-      log("物件: " + g("name") + " " + g("room"));
+      log("物件: " + nm + " " + entry.room + "  区分: " + (isShare ? "シェア" : "単身"));
 
       const tpl = isShare ? picked.share : picked.tanshin;
       if (!tpl){ log("この区分のテンプレートが選択されていません", "err"); $("go").disabled=false; return; }
@@ -490,17 +547,58 @@ def patch(tpl_bytes, values):
       if (names.length > 2) log("氏名が3名以上です（" + names.length + "名）。2名分のみ記入しました。", "warn");
 
       const num = v => { const n = parseFloat(String(v).replace(/,/g,"")); return isNaN(n) ? 0 : n; };
+
+      // --- fees -------------------------------------------------------------
+      const rent    = num(g("rent")),   common = num(g("common")), park = num(g("parkFee"));
+      const aircon  = num(g("aircon")) * (spec === MAP.awaji ? 1000 : 1);
+      const light   = num(g("light"))  * (spec === MAP.awaji ? 100  : 1);
+      const stove   = num(g("stove"))  * (spec === MAP.awaji ? 300  : 1);
+      const furnished = /^〇|^○/.test(furniture);
+      const kagu    = furnished ? KAGUDAI : 0;
+
+      // その他: title comes from the data. Absent title => leave BOTH cells blank,
+      // because a dash or a zero reads as "included at no charge".
+      const o1t = g("other1"), o1f = o1t ? num(g("other1Fee")) : 0;
+      const o2t = g("other2"), o2f = o2t ? num(g("other2Fee")) : 0;
+
+      const total = rent + common + park + aircon + light + stove + kagu + o1f + o2f;
+      log("内訳: 家賃 " + rent + " / 共益 " + common + " / 駐車 " + park +
+          " / 設備 " + (aircon+light+stove) + " / 家具代 " + kagu +
+          (o1t ? " / " + o1t + " " + o1f : "") + (o2t ? " / " + o2t + " " + o2f : "") +
+          "  = 合計 " + total);
+
+      const put = (cell, v, numeric) => { values[cell] = [v, numeric]; };
+      put("C15", total, true);
+      put("C16", rent, true);
+      put("C17", common, true);
+      put("D18", park, true);
+      put("D19", g("parkNo") || BLANK, false);
+      put("D20", aircon, true); put("D21", light, true); put("D22", stove, true);
+
+      // 家具代 / その他①② as their own labelled lines. FEE_ROWS maps to whatever
+      // cells the template uses; update it there if the layout moves.
+      if (FEE_ROWS){
+        put(FEE_ROWS.kaguLabel, "家具代", false);
+        put(FEE_ROWS.kaguValue, kagu, true);
+        // An absent その他 leaves BOTH cells blank. A dash or a zero would read as
+        // "provided at no charge", which is not what a missing entry means.
+        if (o1t){ put(FEE_ROWS.o1Label, o1t, false); put(FEE_ROWS.o1Value, o1f, true); }
+        else    { put(FEE_ROWS.o1Label, "", false);  put(FEE_ROWS.o1Value, "", false); }
+        if (o2t){ put(FEE_ROWS.o2Label, o2t, false); put(FEE_ROWS.o2Value, o2f, true); }
+        else    { put(FEE_ROWS.o2Label, "", false);  put(FEE_ROWS.o2Value, "", false); }
+      } else {
+        put("C23", kagu + o1f + o2f, true);
+        log("テンプレートに家具代・その他①②の行がないため、その他費用にまとめました。", "warn");
+      }
+
+      // --- everything else --------------------------------------------------
       for (const [cell, def] of Object.entries(spec.cells)){
-        if (def.sum){
-          values[cell] = [def.sum.reduce((a,k) => a + num(g(k)), 0), true];
-        } else if (def.x){
-          values[cell] = [num(g(def.c)) * def.x, true];
-        } else {
-          const v = g(def.c);
-          const n = v.replace(/,/g,"");
-          if (n !== "" && /^-?\d+(\.\d+)?$/.test(n)) values[cell] = [parseFloat(n), true];
-          else values[cell] = [v || BLANK, false];
-        }
+        if (values[cell] !== undefined) continue;      // already set above
+        if (def.sum || def.x) continue;                 // fees, handled above
+        const v = g(def.c);
+        const n = v.replace(/,/g,"");
+        if (n !== "" && /^-?\d+(\.\d+)?$/.test(n)) values[cell] = [parseFloat(n), true];
+        else values[cell] = [v || BLANK, false];
       }
 
       // operator inputs
@@ -516,7 +614,7 @@ def patch(tpl_bytes, values):
       if (out && typeof out.destroy === "function") out.destroy();
       py.destroy();
 
-      const fname = "入居案内書_" + (g("name") || "物件") + "_" + (g("room") || "") + "_" +
+      const fname = "入居案内書_" + nm + "_" + entry.room + "_" +
                     new Date().toISOString().slice(0,10).replace(/-/g,"") + ".xlsx";
       const blob = new Blob([bytes], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
       const a = document.createElement("a");
