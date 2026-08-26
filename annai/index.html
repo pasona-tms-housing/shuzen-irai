@@ -260,7 +260,11 @@
   // When the template gains its extra row, set this to the new cells:
   //   {kaguLabel:"C23", kaguValue:"D23", o1Label:"C24", o1Value:"D24",
   //    o2Label:"C25",   o2Value:"D25"}
-  const FEE_ROWS = null;
+  const FEE_ROWS = {
+    kaguLabel:"H20", kaguValue:"I20",
+    o1Label:"H21",   o1Value:"I21",
+    o2Label:"H22",   o2Value:"I22"
+  };
 
   let pyodide = null, picked = {akibukken:null, tanshin:null, share:null};
 
