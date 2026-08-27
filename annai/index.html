@@ -8,9 +8,13 @@
 <title>入居案内書 作成ツール</title>
 <style>
   :root{
-    --paper:#F4F6F8; --card:#FFF; --ink:#16212E; --soft:#4C5D71; --faint:#7B8CA0;
-    --rule:#D6DEE6; --accent:#3E6FA8; --accent-soft:#EAF0F7;
-    --ok:#2C7A5B; --ok-soft:#E9F4EF; --warn:#B01419; --warn-soft:#FBEDED;
+    /* Accent taken from Pasona's own artwork rather than picked: the branded QR
+       in FMT原本 is built from #C6121A, with #8C0812 in its shadows and #F9A0A3
+       as its tint. The greys are biased a few degrees warm to sit under it -
+       the original blue-grey neutrals fought the red. */
+    --paper:#F7F5F5; --card:#FFF; --ink:#1F1A1B; --soft:#5C5153; --faint:#8A7E80;
+    --rule:#E2DCDD; --accent:#C6121A; --accent-deep:#8C0812; --accent-soft:#FCEEEF;
+    --ok:#2C7A5B; --ok-soft:#E9F4EF; --warn:#9A5B08; --warn-soft:#FBF2E6;
     --sans:"Meiryo","メイリオ","Hiragino Sans","Yu Gothic UI",sans-serif;
     --mono:Consolas,"Courier New",monospace;
   }
@@ -18,6 +22,22 @@
   body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.8}
   .wrap{max-width:860px;margin:0 auto;padding:2rem 1.2rem 4rem}
   h1{font-size:1.6rem;margin:0 0 .3rem}
+  .masthead{display:flex;align-items:flex-end;justify-content:space-between;gap:1.2rem;
+            border-bottom:2px solid var(--accent);padding-bottom:.6rem;margin-bottom:1rem}
+  .masthead h1{margin:0}
+  .brand{flex:0 0 auto;text-align:right;line-height:1.35}
+  /* The wordmark is set, not embedded: the only Pasona artwork on hand is a
+     raster caption inside the QR file - black-only and low resolution at this
+     size. Light weight, wide tracking and the negative right margin that undoes
+     the trailing letter-space match how it is drawn there. Swap in an official
+     asset here if one turns up. */
+  .wordmark{display:block;font-weight:300;font-size:1.1rem;letter-spacing:.34em;
+            margin-right:-.34em;color:var(--accent);white-space:nowrap}
+  .ver{display:block;font-family:var(--mono);font-size:.68rem;color:var(--faint)}
+  @media(max-width:520px){
+    .masthead{flex-direction:column-reverse;align-items:flex-start;gap:.5rem}
+    .brand{text-align:left}
+  }
   .lede{color:var(--soft);margin:0 0 1.6rem}
   fieldset{border:1px solid var(--rule);border-radius:5px;background:var(--card);
            padding:1.1rem 1.2rem;margin:0 0 1rem}
@@ -32,11 +52,12 @@
   @media(max-width:640px){.row{grid-template-columns:1fr}}
   button{font:inherit;font-weight:700;padding:.7rem 1.4rem;border-radius:5px;border:0;
          background:var(--accent);color:#fff;cursor:pointer}
-  button:disabled{background:#9DB2C9;cursor:not-allowed}
+  button:hover:not(:disabled){background:var(--accent-deep)}
+  button:disabled{background:#C9BFC0;cursor:not-allowed}
   button.link{background:none;color:var(--accent);padding:0;font-weight:700;
               text-decoration:underline;font-size:.88rem}
   button.link:disabled{color:var(--faint)}
-  #log{font-family:var(--mono);font-size:.82rem;background:#0E1620;color:#D5E0EC;
+  #log{font-family:var(--mono);font-size:.82rem;background:#191314;color:#E6DCDD;
        border-radius:5px;padding:.9rem 1rem;min-height:7rem;max-height:22rem;overflow:auto;
        white-space:pre-wrap;margin-top:1rem}
   #log .ok{color:#7BD1A8} #log .err{color:#FF9AA0} #log .warn{color:#F0C674}
@@ -50,7 +71,17 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>入居案内書 作成ツール</h1>
+  <header class="masthead">
+    <h1>入居案内書 作成ツール</h1>
+    <div class="brand">
+      <span class="wordmark">PASONA</span>
+      <!-- VERSION: the single place to bump it. Shown here, and written into the
+           log so a copied log always says which build produced a document.
+           Bump on every deploy - the hosted page and the copy in the team folder
+           can drift, and this is how you tell them apart. -->
+      <span class="ver" id="ver">v1.0.0 · 2026-08-27</span>
+    </div>
+  </header>
   <p class="lede">空き物件リストから物件情報を読み取り、入居案内書のExcelを作成します。<br>
   ファイルはこのブラウザの中だけで処理され、どこにも送信されません。</p>
 
@@ -510,7 +541,11 @@ def patch(tpl_bytes, values):
     return buf.getvalue()
 `;
 
+  // Read from the DOM rather than duplicated here, so there is one place to bump.
+  const TOOL_VERSION = (document.getElementById("ver") || {}).textContent?.trim() || "(不明)";
+
   (async function boot(){
+    log("入居案内書 作成ツール " + TOOL_VERSION);
     try{
       for (const key of ["tanshin","share"]){
         try{
