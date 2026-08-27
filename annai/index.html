@@ -72,6 +72,7 @@
   .files{font-size:.85rem;margin-top:.6rem}
   .files div{padding:.15rem 0}
   .files .y{color:var(--ok)} .files .n{color:var(--faint)}
+  .files .w{color:var(--accent);font-weight:700}
 </style>
 </head>
 <body>
@@ -84,7 +85,7 @@
            hosted page and the copy in the team folder can drift.
            Numbering rules and history: scripts/../CHANGELOG.md. 1.0.0 is reserved
            for the launch that is actually in use; until then this stays 0.x.y. -->
-      <p class="ver"><span id="ver">v0.2.0 · 2026-08-27</span><em>試作版</em></p>
+      <p class="ver"><span id="ver">v0.3.0 · 2026-08-27</span><em>試作版</em></p>
     </div>
     <img class="logo" width="480" height="87" alt="PASONA"
          src="data:image/png;base64,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">
@@ -289,6 +290,29 @@
   }
 
   const BLANK = "ー";
+  // The template is part of the tool's version: the tool writes to fixed cells,
+  // so a layout change in FMT原本 and the tool that fills it have to move together.
+  // Templates are remembered in this browser, which means a copy saved before a
+  // layout change keeps producing the OLD format under the SAME file name, with
+  // nothing on screen to say so. These fingerprints are how that gets noticed.
+  // Recompute them (scripts/template-fingerprints.py) whenever FMT原本 changes.
+  const TEMPLATE_REV = "2026-08-27";
+  const TEMPLATE_FP  = { tanshin:"94e613563f32490c", share:"26797e9cdc6a6016" };
+
+  // FNV-1a with a second mixed accumulator. Not cryptographic - it only has to
+  // notice the file is a different one. crypto.subtle is deliberately avoided:
+  // it needs a secure context, and the copy in the team folder runs from file://.
+  function tplHash(buf){
+    const b = new Uint8Array(buf);
+    let h1 = 0x811c9dc5, h2 = 0x01000193;
+    for (let i = 0; i < b.length; i++){
+      h1 = Math.imul(h1 ^ b[i], 0x01000193) >>> 0;
+      h2 = Math.imul((h2 + b[i]) >>> 0, 0x85ebca6b) >>> 0;
+    }
+    return h1.toString(16).padStart(8,"0") + h2.toString(16).padStart(8,"0");
+  }
+  const tplCurrent = key => picked[key] && picked[key].fp === TEMPLATE_FP[key];
+
   const KAGUDAI = 4000;          // flat, confirmed 2026-08-26
 
   // Where the 家具代 / その他①② lines are written. The templates gained a その他費用
@@ -305,6 +329,8 @@
   };
 
   let pyodide = null, picked = {akibukken:null, tanshin:null, share:null};
+  let staleAck = false;   // set once the operator has been told a template is old
+  const GO_LABEL = "入居案内書を作成する";   // restored when a current template is chosen
 
   // ---- template storage. IndexedDB, not localStorage: the templates are ~800KB
   // each and localStorage is a ~5MB string store that would be tight and lossy. ----
@@ -339,10 +365,13 @@
     [["単身","tanshin"],["シェア","share"]].forEach(([label,key]) => {
       const d = document.createElement("div");
       const got = picked[key];
-      d.className = got ? "y" : "n";
-      d.textContent = got
-        ? "✓ テンプレート（" + label + "）  " + got.name + "　保存日 " + got.saved
-        : "・ テンプレート（" + label + "）　（未保存）";
+      const fresh = tplCurrent(key);
+      d.className = !got ? "n" : (fresh ? "y" : "w");
+      d.textContent = !got
+        ? "・ テンプレート（" + label + "）　（未保存）"
+        : (fresh ? "✓ テンプレート（" + label + "）  " + got.name + "　保存日 " + got.saved
+                 : "⚠ テンプレート（" + label + "）  " + got.name + "　保存日 " + got.saved +
+                   "　← " + TEMPLATE_REV + " 版ではありません。選び直してください");
       fl.appendChild(d);
     });
   }
@@ -383,10 +412,15 @@
       if (names.some(n => n.indexOf("単身") >= 0))        key = "tanshin";
       else if (names.some(n => n.indexOf("シェア") >= 0)) key = "share";
       if (!key){ log("種類が判別できません: " + f.name, "warn"); continue; }
-      const rec = {name:f.name, saved:today, bytes:new Uint8Array(buf)};
-      picked[key] = {name:rec.name, saved:rec.saved, buf:rec.bytes.buffer};
+      const fp = tplHash(buf);
+      const rec = {name:f.name, saved:today, fp:fp, bytes:new Uint8Array(buf)};
+      picked[key] = {name:rec.name, saved:rec.saved, fp:fp, buf:rec.bytes.buffer};
+      staleAck = false;
+      $("go").textContent = GO_LABEL;
       try{ await tplSave(key, rec); log("テンプレートを保存しました: " + f.name, "ok"); }
       catch(err){ log("保存できませんでした（今回のみ有効）: " + err, "warn"); }
+      if (fp !== TEMPLATE_FP[key])
+        log("注意: このファイルは " + TEMPLATE_REV + " 版のテンプレートではありません（" + fp + "）", "warn");
     }
     drawTpl(); refresh();
   });
@@ -557,7 +591,11 @@ def patch(tpl_bytes, values):
       for (const key of ["tanshin","share"]){
         try{
           const rec = await tplLoad(key);
-          if (rec) picked[key] = {name:rec.name, saved:rec.saved, buf:rec.bytes.buffer};
+          // Records saved before fingerprinting existed carry no fp; compute it
+          // from the bytes we already have rather than trusting the file name.
+          if (rec) picked[key] = {name:rec.name, saved:rec.saved,
+                                  fp: rec.fp || tplHash(rec.bytes.buffer),
+                                  buf:rec.bytes.buffer};
         }catch(err){ /* first run, or storage blocked */ }
       }
       drawTpl(); drawAk();
@@ -598,8 +636,27 @@ def patch(tpl_bytes, values):
       const isShare = /ｼｪｱ|シェア/.test(furniture + status);
       log("物件: " + nm + " " + entry.room + "  区分: " + (isShare ? "シェア" : "単身"));
 
-      const tpl = isShare ? picked.share : picked.tanshin;
+      const tplKey = isShare ? "share" : "tanshin";
+      const tpl = picked[tplKey];
       if (!tpl){ log("この区分のテンプレートが選択されていません", "err"); $("go").disabled=false; return; }
+
+      // A stale template produces a document that looks entirely normal and is
+      // laid out to a superseded format. Refuse the first press; a second press
+      // goes ahead, so an intentional template update is never a dead end.
+      if (!tplCurrent(tplKey)){
+        if (!staleAck){
+          log("保存されている「" + (isShare ? "シェア" : "単身") + "」テンプレートが " +
+              TEMPLATE_REV + " 版ではありません。", "err");
+          log("FMT原本フォルダから選び直してください（「テンプレートを選び直す」）。", "err");
+          log("テンプレートを意図的に更新した場合は、もう一度押すとこのまま作成します。", "warn");
+          staleAck = true;
+          $("go").textContent = "古いテンプレートのまま作成する";
+          $("go").disabled = false;
+          return;
+        }
+        log("古いテンプレートのまま作成しました。レイアウトは " + TEMPLATE_REV +
+            " 版ではありません。", "warn");
+      }
 
       const names = g("resident").split("/").map(x => x.trim()).filter(Boolean);
       const values = {};
